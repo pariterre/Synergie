@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-import os
-import sys
+import logging
 from typing import List
 
 import firebase_admin
@@ -11,6 +10,9 @@ import firebase_admin.firestore
 
 from core.utils.connexion import has_internet_connection
 from core.utils.errors import InternetConnectionError, InvalidCertificateError
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class JumpData:

@@ -16,6 +16,9 @@ from front.MainPage import MainPage
 from front.StartingPage import StartingPage
 from front.StopingPage import StopingPage
 
+logger = logging.getLogger(__name__)
+
+
 class App:
     """
     The main application class that orchestrates the connection process,
@@ -34,20 +37,22 @@ class App:
             root (ttkb.Window): The main application window (tkinter-based).
         """
         # Initialize the database manager and the dot manager.
-        try: 
-            self.db_manager = DatabaseManager(certificate_path="s2m-skating-firebase-adminsdk-3ofmb-8552d58146.json")
-        except InternetConnectionError:
-            logging.error("No internet connection available")
-            messagebox.showerror("Connexion Internet", "Aucune connexion Internet détectée. Veuillez vérifier votre réseau, puis relancer l'application")
-            exit()
-        except InvalidCertificateError:
-            logging.error("Invalid certificate")
-            messagebox.showerror("Certificat Invalide", "Le certificat fourni n'est pas valide. Veuillez vérifier le fichier fourni et relancer l'application.")
-            exit()
-        except Exception as e:
-            logging.error(f"Unknown error while initializing the DatabaseManager: {e}")
-            messagebox.showerror("Erreur", "Une erreur est survenue lors de la connexion à la base de données.")
-            exit()
+        while True:
+            try: 
+                self.db_manager = DatabaseManager(certificate_path="s2m-skating-firebase-adminsdk-3ofmb-8552d58146.json")
+                break
+            except InternetConnectionError:
+                logger.error("No internet connection available")
+                messagebox.showerror("Connexion Internet", "Aucune connexion Internet détectée. Veuillez vérifier votre réseau, puis cliquer sur OK")
+                continue
+            except InvalidCertificateError:
+                logger.error("Invalid certificate")
+                messagebox.showerror("Certificat Invalide", "Le certificat fourni n'est pas valide. Veuillez vérifier le fichier fourni et relancer l'application.")
+                exit()
+            except Exception as e:
+                logger.error(f"Unknown error while initializing the DatabaseManager: {e}")
+                messagebox.showerror("Erreur", "Une erreur inconnue est survenue lors de la connexion à la base de données.")
+                exit()
             
                 
         self.dot_manager = DotManager(self.db_manager)
@@ -137,7 +142,7 @@ class App:
         devices = self.dot_manager.get_devices()
         for device in devices:
             if device.btDevice.stopRecording() is True:
-               logging.info(f"{device.deviceTagName} was recording and was stopped")
+               logger.info(f"{device.deviceTagName} was recording and was stopped")
 
         initialEvent.set()
 
@@ -168,7 +173,7 @@ class App:
 
             # If any devices have been connected, check if they need to be stopped.
             if lastConnected:
-                logging.info("Connexion")
+                logger.info("Connexion")
                 for device in lastConnected:
                     # If device is currently recording or has pending records, stop it.
                     if device.is_recording or device.recordingCount > 0:
@@ -176,7 +181,7 @@ class App:
 
             # If any devices have been disconnected, check if we should start them.
             if lastDisconnected:
-                logging.info("Deconnexion")
+                logger.info("Deconnexion")
                 for device in lastDisconnected:
                     # If device is not currently recording, start it.
                     if not device.is_recording:
