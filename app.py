@@ -16,7 +16,7 @@ from front.MainPage import MainPage
 from front.StartingPage import StartingPage
 from front.StopingPage import StopingPage
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 class App:
@@ -42,15 +42,15 @@ class App:
                 self.db_manager = DatabaseManager(certificate_path="s2m-skating-firebase-adminsdk-3ofmb-8552d58146.json")
                 break
             except InternetConnectionError:
-                logger.error("No internet connection available")
+                _logger.error("No internet connection available")
                 messagebox.showerror("Connexion Internet", "Aucune connexion Internet détectée. Veuillez vérifier votre réseau, puis cliquer sur OK")
                 continue
             except InvalidCertificateError:
-                logger.error("Invalid certificate")
+                _logger.error("Invalid certificate")
                 messagebox.showerror("Certificat Invalide", "Le certificat fourni n'est pas valide. Veuillez vérifier le fichier fourni et relancer l'application.")
                 exit()
             except Exception as e:
-                logger.error(f"Unknown error while initializing the DatabaseManager: {e}")
+                _logger.error(f"Unknown error while initializing the DatabaseManager: {e}")
                 messagebox.showerror("Erreur", "Une erreur inconnue est survenue lors de la connexion à la base de données.")
                 exit()
             
@@ -141,8 +141,8 @@ class App:
         # Now that all devices are connected, check if any are currently recording.
         devices = self.dot_manager.get_devices()
         for device in devices:
-            if device.btDevice.stopRecording() is True:
-               logger.info(f"{device.deviceTagName} was recording and was stopped")
+            if device._bluetooth_device.stopRecording() is True:
+               _logger.info(f"{device.device_tag_name} was recording and was stopped")
 
         initialEvent.set()
 
@@ -173,15 +173,15 @@ class App:
 
             # If any devices have been connected, check if they need to be stopped.
             if lastConnected:
-                logger.info("Connexion")
+                _logger.info("Connexion")
                 for device in lastConnected:
                     # If device is currently recording or has pending records, stop it.
-                    if device.is_recording or device.recordingCount > 0:
+                    if device.is_recording or device.recording_count > 0:
                         callbackStop(device)
 
             # If any devices have been disconnected, check if we should start them.
             if lastDisconnected:
-                logger.info("Deconnexion")
+                _logger.info("Deconnexion")
                 for device in lastDisconnected:
                     # If device is not currently recording, start it.
                     if not device.is_recording:
@@ -226,10 +226,7 @@ if __name__ == "__main__":
     root.geometry(f"{width}x{height}")
 
     # Try to load the application icon from the PyInstaller bundle or from a local path.
-    try:
-        ico = Image.open(f'{sys._MEIPASS}/img/Logo_s2mJUMP_RGB.png')
-    except:
-        ico = Image.open('img/Logo_s2mJUMP_RGB.png')
+    ico = Image.open('resources/img/Logo_s2mJUMP_RGB.png')
 
     photo = ImageTk.PhotoImage(ico)
     root.wm_iconphoto(False, photo)

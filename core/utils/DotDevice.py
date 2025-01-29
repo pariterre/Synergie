@@ -1,16 +1,28 @@
 from datetime import datetime
+import logging
 import os
 import sys
 from threading import Event
 import time
-from movelladot_pc_sdk.movelladot_pc_sdk_py310_64 import XsDotDevice, XsDotUsbDevice, XsDotConnectionManager, XsDotCallback, XsPortInfo, XsDataPacket
+
+from movelladot_pc_sdk.movelladot_pc_sdk_py310_64 import (
+    XsDotDevice,
+    XsDotUsbDevice,
+    XsDotConnectionManager,
+    XsDotCallback,
+    XsPortInfo,
+    XsDataPacket,
+)
 import movelladot_pc_sdk
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageTk
-from constants import *
 
+import constants
 from core.database.DatabaseManager import DatabaseManager, JumpData
+
+_logger = logging.getLogger(__name__)
+
 
 class DotDevice(XsDotCallback):
     """
@@ -19,313 +31,518 @@ class DotDevice(XsDotCallback):
 
     def __init__(
         self,
-        portInfoUsb: XsPortInfo,
-        portInfoBt: XsPortInfo,
-        db_manager: DatabaseManager,
+        port_info_usb: XsPortInfo,
+        port_info_bluetooth: XsPortInfo,
+        database_manager: DatabaseManager,
     ):
         super().__init__()
 
-        self.is_recording = False  # Initialize early to prevent AttributeError
-        self.portInfoUsb = portInfoUsb
-        self.portInfoBt = portInfoBt
-        self.db_manager = db_manager
+        self._database_manager = database_manager
 
-        self.usbManager = XsDotConnectionManager()
-        while self.usbManager is None:
-            self.usbManager = XsDotConnectionManager()
-        self.usbManager.addXsDotCallbackHandler(self)
+        self._port_info_usb = port_info_usb
+        self._usb_manager = XsDotConnectionManager()
+        while self._usb_manager is None:
+            self._usb_manager = XsDotConnectionManager()
+        self._usb_manager.addXsDotCallbackHandler(self)
+        self._usb_device: XsDotUsbDevice = None
+        self._initialize_usb()
 
-        self.btManager = XsDotConnectionManager()
-        while self.btManager is None:
-            self.btManager = XsDotConnectionManager()
-        self.btManager.addXsDotCallbackHandler(self)
+        self._port_info_bluetooth = port_info_bluetooth
+        self._bluetooth_manager = XsDotConnectionManager()
+        while self._bluetooth_manager is None:
+            self._bluetooth_manager = XsDotConnectionManager()
+        self._bluetooth_manager.addXsDotCallbackHandler(self)
+        self._bluetooth_device: XsDotDevice = None
+        self._initialize_bluetooth()
 
-        self.usbDevice: XsDotUsbDevice = None
-        self.btDevice: XsDotDevice = None
-        self.initializeUsb()
-        self.initializeBt()
-        self.deviceId = str(self.usbDevice.deviceId())
-        self.deviceTagName = str(self.btDevice.deviceTagName())
-        self.batteryLevel = self.btDevice.batteryLevel()
-        self.isRecording = self.usbDevice.recordingCount() == -1
-        if self.isRecording:
-            self.recordingCount = 0
+        self._is_recording = self._usb_device.recordingCount() == -1
+        if self._is_recording:
+            self._recording_count = 0
         else:
-            self.recordingCount = self.usbDevice.recordingCount()
-        self.isPlugged = True
-        self.timingRecord = datetime.now().timestamp()
+            self._recording_count = self._usb_device.recordingCount()
+        self._is_battery_charging = False
+        self._is_plugged = True
+        self._timing_record = datetime.now().timestamp()
 
-        self.loadImages()
-        self.currentImage = self.imageActive
+        self._load_images()
+        self._current_image = self._image_active
 
-        self.count = 0
-        self.packetsReceived = []
-        self.synchroTime = 0
-        self.exportDone = False
+        self._save_data_to_file = False
+        self._count = 0
+        self._packets_received = []
+        self._synchro_time = 0
+        self._export_done = False
 
-    def initializeBt(self):
+        _logger.info(
+            f"DotDevice initialized: {self.device_tag_name} (ID: {self.deviceId})"
+        )
+
+    @property
+    def is_recording(self) -> bool:
+        return self._is_recording
+
+    @property
+    def device_id(self) -> str:
+        return str(self._usb_device.deviceId())
+
+    @property
+    def device_tag_name(self) -> str:
+        return str(self._bluetooth_device.deviceTagName())
+
+    @property
+    def battery_level(self) -> int:
+        return self._bluetooth_device.batteryLevel()
+
+    @property
+    def timing_record(self) -> float:
+        return self._timing_record
+
+    @property
+    def is_plugged(self) -> bool:
+        return self._is_plugged
+
+    @property
+    def is_battery_charging(self) -> bool:
+        return self._is_battery_charging
+
+    @property
+    def current_image(self) -> ImageTk.PhotoImage:
+        return self._current_image
+
+    @property
+    def recording_count(self) -> int:
+        return self._recording_count
+
+    def _initialize_bluetooth(self):
         """
         Initialize the Bluetooth connection
 
         Raises:
             Exception: If the connection to the device fails
         """
-        self.btManager.closePort(self.portInfoBt)
-        checkDevice = False
-        while not checkDevice:
-            self.btManager.closePort(self.portInfoBt)
-            if not self.btManager.openPort(self.portInfoBt):
-                print(f"Connection to Device {self.portInfoBt.bluetoothAddress()} failed")
-                checkDevice = False
-            else:
-                device : XsDotDevice = self.btManager.device(self.portInfoBt.deviceId())
-                if device is None:
-                    checkDevice = False
-                else:
+        while True:
+            self._bluetooth_manager.closePort(self._port_info_bluetooth)
+            if self._bluetooth_manager.openPort(self._port_info_bluetooth):
+                device: XsDotDevice = self._bluetooth_manager.device(
+                    self._port_info_bluetooth.deviceId()
+                )
+                if device:
                     time.sleep(1)
-                    checkDevice = (device.deviceTagName() != '') and (device.batteryLevel() != 0)
-        self.btDevice = device
+                    if device.deviceTagName() and device.batteryLevel():
+                        break
+            _logger.warning(
+                f"Bluetooth device {self._port_info_bluetooth.bluetoothAddress()} not found, retrying..."
+            )
 
-    def initializeUsb(self):
+        self._bluetooth_device = device
+
+    def _initialize_usb(self):
         """
         Initialize the USB connection
         """
-        self.usbManager.closePort(self.portInfoUsb)
-        device = None
-        while device is None:
-            self.usbManager.openPort(self.portInfoUsb)
-            device = self.usbManager.usbDevice(self.portInfoUsb.deviceId())
-        self.usbDevice = device
-    
-    def loadImages(self):
+
+        if hasattr(self._port_info_usb, "serial"):
+            serial_info = self._port_info_usb.serial
+        elif hasattr(self._port_info_usb, "serialNumber"):
+            serial_info = self._port_info_usb.serialNumber
+        else:
+            serial_info = "Unknown Serial"
+
+        self._usb_manager.closePort(self._port_info_usb)
+        while True:
+            self._usb_manager.openPort(self._port_info_usb)
+            device = self._usb_manager.usbDevice(self._port_info_usb.deviceId())
+            if device:
+                break
+            _logger.warning(f"Connection to USB Device {serial_info} failed")
+
+        _logger.info(f"USB connection established with device ID: {self.device_id}")
+        self._usb_device = device
+        self.is_plugged = True
+
+    def _load_images(self):
         """
         Load the images for the active and inactive states of the sensor.
         """
-        fontTag = ImageFont.truetype(font="arialbd.ttf",size=60)
-        try:
-            imgActive = Image.open(f"{sys._MEIPASS}/img/Dot_active.png")
-        except:
-            imgActive = Image.open(f"img/Dot_active.png")
-        d = ImageDraw.Draw(imgActive)
-        text = self.deviceTagName
-        x = 0
-        if len(text) == 1:
-            x = 93
-        else:
-            x = 75
-        d.text( (x,65), text,font=fontTag, fill="black")
-        imgActive = imgActive.resize((116, 139))
-        self.imageActive = ImageTk.PhotoImage(imgActive)
+        base_folder = os.path.dirname(
+            __file__
+        )  # TODO : This can be changed to relative with a proper packaging
+        font_tag = ImageFont.truetype(font="arialbd.ttf", size=60)
+
+        text = self.device_tag_name
+        text_offset_x = 93 if len(text) == 1 else 75
+
+        img_active = Image.open(f"{base_folder}/resources/img/dot_active.png")
+        d = ImageDraw.Draw(img_active)
+        d.text((text_offset_x, 65), text, font=font_tag, fill="black")
+        img_active = img_active.resize((116, 139))
+        self._image_active = ImageTk.PhotoImage(img_active)
 
         # Load inactive image
-        try:
-            imgInactive = Image.open(f"{sys._MEIPASS}/img/Dot_inactive.png")
-        except:
-            imgInactive = Image.open(f"img/Dot_inactive.png")
-        d = ImageDraw.Draw(imgInactive)
-        d.text( (x,65), text,font=fontTag, fill="black")
-        imgInactive = imgInactive.resize((116, 139))
-        self.imageInactive = ImageTk.PhotoImage(imgInactive)
-    
-    def startRecord(self):
+        img_inactive = Image.open(f"{base_folder}/resources/img/dot_inactive.png")
+        d = ImageDraw.Draw(img_inactive)
+        d.text((text_offset_x, 65), text, font=font_tag, fill="black")
+        img_inactive = img_inactive.resize((116, 139))
+        self._image_inactive = ImageTk.PhotoImage(img_inactive)
+
+    def start_recording(self) -> bool:
         """
         Start recording on the sensor
-        """
-        self.isRecording = True
-        if not self.btDevice.startRecording():
-            self.initializeBt()
-            self.isRecording = self.btDevice.startRecording()
-        if self.isRecording:
-            self.timingRecord = datetime.now().timestamp()
-        return self.isRecording
 
-    def stopRecord(self):
+        Returns:
+        bool: Whether the recording was started successfully
+        """
+
+        if not self._bluetooth_device.startRecording():
+            _logger.warning(
+                "Failed to start recording on Bluetooth device. Trying to reconnect once..."
+            )
+            self._initialize_bluetooth()
+            if not self._bluetooth_device.startRecording():
+                _logger.warning("Failed to start recording on Bluetooth device.")
+                return False
+
+        self._timing_record = datetime.now().timestamp()
+        self._is_recording = True
+        _logger.info(f"Recording started at {self.timing_record} seconds.")
+        return True
+
+    def stop_recording(self) -> bool:
         """
         Stop recording on the sensor
-        """
-        self.isRecording = False
-        if not self.btDevice.stopRecording():
-            self.initializeBt()
-            self.isRecording = not self.btDevice.stopRecording()
-        self.recordingCount = self.usbDevice.recordingCount()
-        return not self.isRecording
 
-    def exportData(self, saveFile : bool, extractEvent : Event):
+        Returns:
+        bool: Whether the recording was stopped successfully
+        """
+
+        if not self._bluetooth_device.stopRecording():
+            _logger.warning(
+                "Failed to stop recording on Bluetooth device. Trying to reconnect once..."
+            )
+            self._initialize_bluetooth()
+            if not self._bluetooth_device.stopRecording():
+                _logger.warning("Failed to stop recording on Bluetooth device.")
+                return False
+
+        self._is_recording = False
+        self._recording_count = self._usb_device.recordingCount()
+        self._current_image = self._image_inactive
+        _logger.info(f"Recording stopped at {datetime.now().timestamp()} seconds.")
+        return True
+
+    def export_data(self, save_data_to_file: bool, extract_event: Event):
         """
         Export the sensor data
 
         Args:
-        saveFile : Whether to save all available data (not just the data needed for the models)
-        extractEvent : Event to inform the main thread that the extraction is complete
+        save_data_to_file : Whether to save all available data (not just the data needed for the models)
+        extract_event : Event to inform the main thread that the extraction is complete
 
         Raises:
         Exception: If the export fails
         """
-        self.saveFile = saveFile
-        print("Exporting...")
-        self.exportDone = False
-        self.packetsReceived = []
-        self.count = 0
-        exportData = movelladot_pc_sdk.XsIntArray()
+        _logger.info("Exporting data from sensor...")
+
+        self._save_data_to_file = save_data_to_file
+        self._export_done = False
+        self._packets_received = []
+        self._count = 0
+        data = movelladot_pc_sdk.XsIntArray()
         # Define the types of data to export
-        exportData.push_back(movelladot_pc_sdk.RecordingData_Timestamp)
-        exportData.push_back(movelladot_pc_sdk.RecordingData_Euler)
-        exportData.push_back(movelladot_pc_sdk.RecordingData_Acceleration)
-        exportData.push_back(movelladot_pc_sdk.RecordingData_AngularVelocity)
-        if self.saveFile:
-            exportData.push_back(movelladot_pc_sdk.RecordingData_MagneticField)
-            exportData.push_back(movelladot_pc_sdk.RecordingData_Quaternion)
-            exportData.push_back(movelladot_pc_sdk.RecordingData_Status)
+        data.push_back(movelladot_pc_sdk.RecordingData_Timestamp)
+        data.push_back(movelladot_pc_sdk.RecordingData_Euler)
+        data.push_back(movelladot_pc_sdk.RecordingData_Acceleration)
+        data.push_back(movelladot_pc_sdk.RecordingData_AngularVelocity)
+        if self._save_data_to_file:
+            data.push_back(movelladot_pc_sdk.RecordingData_MagneticField)
+            data.push_back(movelladot_pc_sdk.RecordingData_Quaternion)
+            data.push_back(movelladot_pc_sdk.RecordingData_Status)
 
         # Select the data types for export
-        if not self.usbDevice.selectExportData(exportData):
-            print(f'Could not select export data. Reason: {self.usbDevice.lastResultText()}')
+        if not self._usb_device.selectExportData(data):
+            _logger.error(
+                f"Could not select export data. Reason: {self._usb_device.lastResultText()}"
+            )
+            self._export_done = True
+            return
 
         # Iterate through each recording and export data
-        for recordingIndex in range(1, self.usbDevice.recordingCount()+1):
-            recInfo = self.usbDevice.getRecordingInfo(recordingIndex)
-            if recInfo.empty():
-                print(f'Could not get recording info. Reason: {self.usbDevice.lastResultText()}')
+        for index in range(1, self._usb_device.recordingCount() + 1):
+            rec_info = self._usb_device.getRecordingInfo(index)
+            if rec_info.empty():
+                _logger.warning(
+                    f"Could not get recording info. Reason: {self._usb_device.lastResultText()}"
+                )
+                continue  # Skip to the next recording
 
-            dateRecord = recInfo.startUTC()
-            trainingId = self.db_manager.get_current_record(self.deviceId)
-            if trainingId != "":
-                self.db_manager.set_training_date(trainingId, dateRecord)
-                if not self.usbDevice.startExportRecording(recordingIndex):
-                    print(f'Could not export recording. Reason: {self.usbDevice.lastResultText()}')
+            record_date = rec_info.startUTC()
+            training_id = self._database_manager.get_current_record(self.device_id)
+            if training_id:
+                self._database_manager.set_training_date(training_id, record_date)
+                if not self._usb_device.startExportRecording(index):
+                    _logger.error(
+                        f"Could not export recording. Reason: {self._usb_device.lastResultText()}"
+                    )
+                    continue
+
+                while not self._export_done:
+                    time.sleep(0.1)
+                _logger.info("File export finished!")
+
+                columnSelected = [
+                    "PacketCounter",
+                    "SampleTimeFine",
+                    "Euler_X",
+                    "Euler_Y",
+                    "Euler_Z",
+                ]
+                if self._save_data_to_file:
+                    columnSelected += [
+                        "Quat_W",
+                        "Quat_X",
+                        "Quat_Y",
+                        "Quat_Z",
+                        "Acc_X",
+                        "Acc_Y",
+                        "Acc_Z",
+                        "Gyr_X",
+                        "Gyr_Y",
+                        "Gyr_Z",
+                        "Mag_X",
+                        "Mag_Y",
+                        "Mag_Z",
+                    ]
                 else:
-                    while not self.exportDone:
-                        time.sleep(0.1)
-                    print('File export finished!')
-                    if self.saveFile:
-                        columnSelected = ["PacketCounter","SampleTimeFine","Euler_X","Euler_Y","Euler_Z","Quat_W","Quat_X","Quat_Y","Quat_Z","Acc_X","Acc_Y","Acc_Z","Gyr_X","Gyr_Y","Gyr_Z","Mag_X","Mag_Y","Mag_Z"]
+                    columnSelected += [
+                        "Acc_X",
+                        "Acc_Y",
+                        "Acc_Z",
+                        "Gyr_X",
+                        "Gyr_Y",
+                        "Gyr_Z",
+                    ]
+
+                df = pd.DataFrame.from_records(
+                    self._packets_received, columns=columnSelected
+                )
+                date = datetime.fromtimestamp(record_date).strftime("%Y_%m_%d")
+                start_sample_time = df["SampleTimeFine"].iloc[0]  # TODO Check the iloc
+                new_sample_time_fine = []
+                for timeFine in df["SampleTimeFine"]:
+                    new_time = timeFine - start_sample_time
+                    if new_time < 0:
+                        new_sample_time_fine.append(new_time + 2**32)
                     else:
-                        columnSelected = ["PacketCounter","SampleTimeFine","Euler_X","Euler_Y","Euler_Z","Acc_X","Acc_Y","Acc_Z","Gyr_X","Gyr_Y","Gyr_Z"]
-                    df = pd.DataFrame.from_records(self.packetsReceived, columns=columnSelected)
-                    date = datetime.fromtimestamp(dateRecord).strftime("%Y_%m_%d")
-                    startSampleTime = df["SampleTimeFine"][0]
-                    newSampleTimeFine = []
-                    for timeFine in df["SampleTimeFine"]:
-                        newTime = timeFine - startSampleTime
-                        if newTime < 0:
-                            newSampleTimeFine.append(newTime + 2**32)
-                        else:
-                            newSampleTimeFine.append(newTime)
-                    df["SampleTimeFine"] = newSampleTimeFine
-                    self.synchroTime = max(0, self.synchroTime - startSampleTime)
-                    os.makedirs(f"data/raw/{date}", exist_ok = True)
-                    df.to_csv(f"data/raw/{date}/{self.synchroTime}_{trainingId}.csv", index=False)
+                        new_sample_time_fine.append(new_time)
+                df["SampleTimeFine"] = new_sample_time_fine
+                self._synchro_time = max(0, self._synchro_time - start_sample_time)
 
-                    # Predict training data and update the database
-                    self.predict_training(trainingId, df)
-                    self.db_manager.remove_current_record(self.deviceId, trainingId)
-                    self.recordingCount -= 1
-        
+                csv_path = f"data/raw/{date}/{self._synchro_time}_{training_id}.csv"
+                os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+                df.to_csv(csv_path, index=False)
+                _logger.info(f"Data exported to {csv_path}")
+
+                # Predict training data and update the database
+                self.predict_training(training_id, df)
+                self._database_manager.remove_current_record(self.deviceId, training_id)
+                self._recording_count -= 1
+
         # Erase sensor's flash memory after exporting
-        self.usbDevice.eraseFlash()
-        print("You can disconnect the dot")
-        self.recordingCount = 0
-        extractEvent.set()
-        self.currentImage = self.imageActive
+        self._usb_device.eraseFlash()
+        _logger.info("You can disconnect the dot.")
+        self._recording_count = 0
+        extract_event.set()
+        self._current_image = self._image_active
 
-    def predict_training(self, training_id : str, df : pd.DataFrame):
+    def predict_training(self, training_id: str, df: pd.DataFrame):
         from core.data_treatment.data_generation.exporter import export
+
         """
         Predict the training data and update the database
         """
         try:
             df = export(df)
-            print("End of process")
-            trainingJumps = []
+            _logger.info("End of data processing.")
+            training_jumps = []
             unknow_rotation = []
-            for iter,row in df.iterrows():
+            for _, row in df.iterrows():
                 jump_time_min, jump_time_sec = row["videoTimeStamp"].split(":")
-                jump_time = '{:02d}:{:02d}'.format(int(jump_time_min), int(jump_time_sec))
+                jump_time = "{:02d}:{:02d}".format(
+                    int(jump_time_min), int(jump_time_sec)
+                )
                 val_rot = float(row["rotations"])
+
                 if row["type"] < 5 and val_rot > 0.5:
                     if val_rot < 2:
-                        val_rot = np.ceil(val_rot-0.3)
+                        val_rot = np.ceil(val_rot - 0.3)
                     else:
-                        val_rot = np.ceil(val_rot-0.15)
-                    jump_data = JumpData(0, training_id, jumpType(int(row["type"])).name, val_rot, bool(row["success"]), jump_time, float(row["rotation_speed"]), float(row["length"]))
-                    trainingJumps.append(jump_data.to_dict())
-                elif row["type"] == 5 and val_rot > 0.8: 
-                    val_rot = np.ceil(val_rot-0.7)+0.5
-                    jump_data = JumpData(0, training_id, jumpType(int(row["type"])).name, val_rot, bool(row["success"]), jump_time, float(row["rotation_speed"]), float(row["length"]))
-                    trainingJumps.append(jump_data.to_dict())
+                        val_rot = np.ceil(val_rot - 0.15)
+                    jump_data = JumpData(
+                        0,
+                        training_id,
+                        constants.JumpType(int(row["type"])).name,
+                        val_rot,
+                        bool(row["success"]),
+                        jump_time,
+                        float(row["rotation_speed"]),
+                        float(row["length"]),
+                    )
+                    training_jumps.append(jump_data.to_dict())
+                elif row["type"] == 5 and val_rot > 0.8:
+                    val_rot = np.ceil(val_rot - 0.7) + 0.5
+                    jump_data = JumpData(
+                        0,
+                        training_id,
+                        constants.JumpType(int(row["type"])).name,
+                        val_rot,
+                        bool(row["success"]),
+                        jump_time,
+                        float(row["rotation_speed"]),
+                        float(row["length"]),
+                    )
+                    training_jumps.append(jump_data.to_dict())
                 else:
-                    jump_data = JumpData(0, training_id, jumpType(int(row["type"])).name, 0, bool(row["success"]), jump_time, float(row["rotation_speed"]), float(row["length"]))
+                    jump_data = JumpData(
+                        0,
+                        training_id,
+                        constants.JumpType(int(row["type"])).name,
+                        0,
+                        bool(row["success"]),
+                        jump_time,
+                        float(row["rotation_speed"]),
+                        float(row["length"]),
+                    )
                     unknow_rotation.append(jump_data)
-            if trainingJumps != []:
-                self.db_manager.add_jumps_to_training(training_id, trainingJumps)
+
+            if training_jumps:
+                self._database_manager.add_jumps_to_training(
+                    training_id, training_jumps
+                )
             else:
                 for jump in unknow_rotation:
-                    trainingJumps.append(jump.to_dict())
-                self.db_manager.add_jumps_to_training(training_id, trainingJumps)
-        except:
-            pass
-        
-    def onRecordedDataAvailable(self, device, packet : XsDataPacket):
+                    training_jumps.append(jump.to_dict())
+                self._database_manager.add_jumps_to_training(
+                    training_id, training_jumps
+                )
+
+            _logger.info(f"Training {training_id} updated with jump data.")
+
+        except Exception as e:
+            _logger.error(f"Error during prediction training: {e}")
+
+    def onRecordedDataAvailable(self, device, packet: XsDataPacket):
         """
         Callback function that is called when data is available
         """
-        self.count += 1
+        self._count += 1
         euler = packet.orientationEuler()
         captor = packet.calibratedData()
-        if self.saveFile:
+        if self._save_data_to_file:
             quaternion = packet.orientationQuaternion()
-            data = np.concatenate([[int(self.count), packet.sampleTimeFine(), euler.x(), euler.y(), euler.z()], quaternion, captor.m_acc, captor.m_gyr, captor.m_mag])
+            data = np.concatenate(
+                [
+                    [
+                        int(self._count),
+                        packet.sampleTimeFine(),
+                        euler.x(),
+                        euler.y(),
+                        euler.z(),
+                    ],
+                    quaternion,
+                    captor.m_acc,
+                    captor.m_gyr,
+                    captor.m_mag,
+                ]
+            )
         else:
-            data = np.concatenate([[int(self.count), packet.sampleTimeFine(), euler.x(), euler.y(), euler.z()], captor.m_acc, captor.m_gyr])
-        self.packetsReceived.append(data)
-    
+            data = np.concatenate(
+                [
+                    [
+                        int(self._count),
+                        packet.sampleTimeFine(),
+                        euler.x(),
+                        euler.y(),
+                        euler.z(),
+                    ],
+                    captor.m_acc,
+                    captor.m_gyr,
+                ]
+            )
+        self._packets_received.append(data)
+
     def onRecordedDataDone(self, device):
         """
         Callback function that is called when the data are done recording
         """
-        self.exportDone = True
-    
+        self._export_done = True
+
     def __eq__(self, device) -> bool:
         """
         Check if two devices are the same
         """
-        return (self.usbDevice == device.usbDevice) and (self.btDevice == device.btDevice)
-    
+        return (self._usb_device == device.usbDevice) and (
+            self._bluetooth_device == device.btDevice
+        )
+
     def getExportEstimatedTime(self) -> int:
         """
         Get the estimated time to export
         """
         estimatedTime = 0
-        for index in range(1,self.usbDevice.recordingCount()+1):
-            estimatedTime = estimatedTime + round(self.usbDevice.getRecordingInfo(index).storageSize()/(237568*8),1)
+        for index in range(1, self._usb_device.recordingCount() + 1):
+            storage_size = self._usb_device.getRecordingInfo(index).storageSize()
+            estimatedTime = estimatedTime + round(storage_size / (237568 * 8), 1)
         return estimatedTime + 1
 
-    def onBatteryUpdated(self, device: XsDotDevice, batteryLevel: int, chargingStatus: int):
+    def onBatteryUpdated(
+        self, device: XsDotDevice, battery_level: int, charging_status: int
+    ):
         """
         Callback function that is called when the battery level is updated
         """
-        self.batteryLevel = batteryLevel
-    
-    def onButtonClicked(self, device: XsDotDevice, timestamp : int):
+        self._is_battery_charging = charging_status == 1
+        _logger.info(
+            f"Battery level updated: {battery_level}%, Charging: {self._is_battery_charging}"
+        )
+
+    def onButtonClicked(self, device: XsDotDevice, timestamp: int):
         """
         Callback function that is called when the button is clicked
         """
-        self.synchroTime = timestamp
+        self._synchro_time = timestamp
+        _logger.info(f"Button clicked at timestamp: {self._synchro_time}")
 
     def closeUsb(self):
         """
         Close the USB connection
         """
-        self.usbManager.closePort(self.portInfoUsb)
-        self.isPlugged = False
-    
+        self._usb_manager.closePort(self._port_info_usb)
+        self._is_plugged = False
+        _logger.info("USB connection closed.")
+
     def openUsb(self):
         """
         Open the USB connection
         """
-        device = None
-        while device is None:
-            self.usbManager.openPort(self.portInfoUsb)
-            device = self.usbManager.usbDevice(self.portInfoUsb.deviceId())
-        self.usbDevice = device
-        self.isPlugged = True
+        if hasattr(self._port_info_usb, "serial"):
+            serial_info = self._port_info_usb.serial
+        elif hasattr(self._port_info_usb, "serialNumber"):
+            serial_info = self._port_info_usb.serialNumber
+        else:
+            serial_info = "Unknown Serial"
+
+        while True:
+            self._usb_manager.openPort(self._port_info_usb)
+            device = self._usb_manager.usbDevice(self._port_info_usb.deviceId())
+            if device:
+                break
+            _logger.warning(f"Connection to USB Device {serial_info} failed")
+
+        self._usb_device = device
+        _logger.info("USB connection opened.")
+
+        if self.is_recording:
+            _logger.info("USB device is currently recording. Stopping recording...")
+            self.stop_recording()
+
+        self._is_plugged = True

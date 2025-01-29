@@ -78,7 +78,7 @@ sessions = {
         }
     }
 
-class jumpType(Enum):
+class JumpType(Enum):
     """
     figure skating jump type enum
     """

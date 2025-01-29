@@ -69,16 +69,16 @@ class DotManager:
 
         unconnectedDevice = []
 
-        for portInfoBt in self.portInfoBt:
-            device = self.db_manager.get_dot_from_bluetooth(portInfoBt.bluetoothAddress())
+        for port_info_bluetooth in self.portInfoBt:
+            device = self.db_manager.get_dot_from_bluetooth(port_info_bluetooth.bluetoothAddress())
             if device is None :
                 print("Adding a new device")
-                deviceId = self.connectNewDevice(portInfoBt)
+                deviceId = self.connectNewDevice(port_info_bluetooth)
             else:
                 deviceId = device.id
-            portInfoUsb = self.portInfoUsb.get(deviceId, None)
-            if portInfoUsb is not None:
-                self.devices.append(DotDevice(portInfoUsb, portInfoBt, self.db_manager))
+            port_info_usb = self.portInfoUsb.get(deviceId, None)
+            if port_info_usb is not None:
+                self.devices.append(DotDevice(port_info_usb=port_info_usb, port_info_bluetooth=port_info_bluetooth, database_manager=self.db_manager))
             else:
                 print(f"Please plug sensor {device.get('tag_name')}")
                 unconnectedDevice.append(device.get('tag_name'))
@@ -94,7 +94,7 @@ class DotManager:
         """
         connected : List[DotDevice] = []
         for device in self.devices:
-            if device.btDevice.isCharging():
+            if device._bluetooth_device.isCharging():
                 connected.append(device)
 
         lastConnected = []

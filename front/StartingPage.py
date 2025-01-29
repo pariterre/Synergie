@@ -35,7 +35,7 @@ class StartingPage:
         """
         self.device = device
         self.db_manager = db_manager
-        self.deviceTag = self.device.deviceTagName
+        self.device_tag = self.device.device_tag_name
         self.skaters = self.db_manager.getAllSkaterFromCoach(userConnected)
 
         self.window = ttkb.Toplevel(title="Confirmation", size=(1400,400), topmost=True)
@@ -51,7 +51,7 @@ class StartingPage:
         self.window.grid_columnconfigure(0, weight=1, pad=20)
         self.window.grid_columnconfigure(1, weight=0)
 
-        self.label = ttkb.Label(self.window, text=f"Lancer un enregistrement sur le capteur {self.deviceTag}", font=Font(self.window, size=20, weight=BOLD))
+        self.label = ttkb.Label(self.window, text=f"Lancer un enregistrement sur le capteur {self.device_tag}", font=Font(self.window, size=20, weight=BOLD))
         self.label.grid(row=0,column=0,columnspan=2, pady=20)
 
         self.canvas = ttkb.Canvas(self.window)
@@ -105,15 +105,15 @@ class StartingPage:
             skaterId (str): The unique identifier of the selected skater.
             skaterName (str): The name of the selected skater.
         """
-        deviceId = self.device.deviceId
+        deviceId = self.device.device_id
         new_training = TrainingData(0, skaterId, 0, deviceId, [])
         self.db_manager.set_current_record(deviceId, self.db_manager.save_training_data(new_training))
-        recordStarted = self.device.startRecord()
+        recordStarted = self.device.start_recording()
         self.canvas.destroy()
         self.label.destroy()
         self.frame = ttkb.Frame(self.window)
         if recordStarted :
-            message = f"Enregistrement commencé sur le capteur {self.deviceTag} pour {skaterName}"
+            message = f"Enregistrement commencé sur le capteur {self.device_tag} pour {skaterName}"
         else : 
             message = "Erreur durant le lancement, impossible de lancer l'enregistrement"
         label = ttkb.Label(self.frame, text=message, font=Font(self.window, size=20, weight=BOLD))

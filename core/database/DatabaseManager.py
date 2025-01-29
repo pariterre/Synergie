@@ -11,7 +11,7 @@ import firebase_admin.firestore
 from core.utils.connexion import has_internet_connection
 from core.utils.errors import InternetConnectionError, InvalidCertificateError
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
