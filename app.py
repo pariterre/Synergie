@@ -1,15 +1,20 @@
+import logging
 import time
-from PIL import Image, ImageTk
-import ttkbootstrap as ttkb
-from tkinter import messagebox
 import threading
+import sys
 
-from front.ConnectionPage import ConnectionPage
-from core.database.DatabaseManager import *
+from PIL import Image, ImageTk
+from tkinter import messagebox
+import ttkbootstrap as ttkb
+
+# TODO Move this in a synergy package
+from core.database.DatabaseManager import DatabaseManager
+from core.utils.errors import InternetConnectionError, InvalidCertificateError
 from core.utils.DotManager import DotManager
+from front.ConnectionPage import ConnectionPage
+from front.MainPage import MainPage
 from front.StartingPage import StartingPage
 from front.StopingPage import StopingPage
-from front.MainPage import MainPage
 
 class App:
     """
@@ -29,7 +34,22 @@ class App:
             root (ttkb.Window): The main application window (tkinter-based).
         """
         # Initialize the database manager and the dot manager.
-        self.db_manager = DatabaseManager()
+        try: 
+            self.db_manager = DatabaseManager(certificate_path="s2m-skating-firebase-adminsdk-3ofmb-8552d58146.json")
+        except InternetConnectionError:
+            logging.error("No internet connection available")
+            messagebox.showerror("Connexion Internet", "Aucune connexion Internet détectée. Veuillez vérifier votre réseau, puis relancer l'application")
+            exit()
+        except InvalidCertificateError:
+            logging.error("Invalid certificate")
+            messagebox.showerror("Certificat Invalide", "Le certificat fourni n'est pas valide. Veuillez vérifier le fichier fourni et relancer l'application.")
+            exit()
+        except Exception as e:
+            logging.error(f"Unknown error while initializing the DatabaseManager: {e}")
+            messagebox.showerror("Erreur", "Une erreur est survenue lors de la connexion à la base de données.")
+            exit()
+            
+                
         self.dot_manager = DotManager(self.db_manager)
 
         # Store the root window for later use in the application.
@@ -99,20 +119,35 @@ class App:
         Args:
             initialEvent (threading.Event): An event to set once initialization is done.
         """
-        (check, unconnectedDevice) = self.dot_manager.firstConnection()
+        (check, unconnectedDevice) = self.dot_manager.first_connection()
         
         # If not all devices are connected, prompt user to reconnect missing devices.
         while not check:
             deviceMessage = f"{unconnectedDevice[0]}"
             for deviceTag in unconnectedDevice[1:]:
-                deviceMessage = deviceMessage + " ," + deviceTag 
-            messagebox.askretrycancel("Connexion", f"Veuillez reconnecter les capteurs {deviceMessage}")
-            (check, unconnectedDevice) = self.dot_manager.firstConnection()
+                deviceMessage += f", {deviceTag}"
+            # Ask the user to retry the connection for missing devices.
+            retry = messagebox.askretrycancel("Connexion", f"Veuillez reconnecter les capteurs {deviceMessage}")
+            if not retry:
+                # User chose to cancel; exit the initialization loop.
+                return
+            (check, unconnectedDevice) = self.dot_manager.first_connection()
+
+        # Now that all devices are connected, check if any are currently recording.
+        devices = self.dot_manager.get_devices()
+        for device in devices:
+            if device.btDevice.stopRecording() is True:
+               logging.info(f"{device.deviceTagName} was recording and was stopped")
 
         initialEvent.set()
 
-        usb_detection_thread = threading.Thread(target=self.checkUsbDots, args=([self.startStopping, self.startStarting]))
-        usb_detection_thread.daemon = True
+        
+        # Start a separate thread to monitor device connections/disconnections.
+        usb_detection_thread = threading.Thread(
+            target=self.checkUsbDots,
+            args=([self.startStopping, self.startStarting]),
+            daemon=True,
+        )
         usb_detection_thread.start()
 
     def checkUsbDots(self, callbackStop, callbackStart):
@@ -127,13 +162,13 @@ class App:
         """
         while True:
             # Check the status of devices.
-            checkUsb = self.dot_manager.checkDevices()
+            checkUsb = self.dot_manager.check_devices()
             lastConnected = checkUsb[0]    # Devices that got connected since last check.
             lastDisconnected = checkUsb[1] # Devices that got disconnected since last check.
 
             # If any devices have been connected, check if they need to be stopped.
             if lastConnected:
-                print("Connexion")
+                logging.info("Connexion")
                 for device in lastConnected:
                     # If device is currently recording or has pending records, stop it.
                     if device.is_recording or device.recordingCount > 0:
@@ -141,7 +176,7 @@ class App:
 
             # If any devices have been disconnected, check if we should start them.
             if lastDisconnected:
-                print("Deconnexion")
+                logging.info("Deconnexion")
                 for device in lastDisconnected:
                     # If device is not currently recording, start it.
                     if not device.is_recording:
@@ -171,6 +206,9 @@ class App:
 
 # Entry point of the application.
 if __name__ == "__main__":
+    # Set up the logging configuration.
+    logging.basicConfig(level=logging.INFO)
+
     # Initialize the main application window.
     root = ttkb.Window(title="Synergie", themename="minty")
 

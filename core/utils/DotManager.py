@@ -27,7 +27,7 @@ class DotManager:
         self.devices : List[DotDevice] = []
         self.previousConnected : List[DotDevice] = []
 
-    def firstConnection(self) -> tuple[bool, List[str]]:
+    def first_connection(self) -> tuple[bool, List[str]]:
         """
         Première connexion aux capteurs, pour cela on désactive d'abord le bluetooth pour se connecter en USB aux capteurs,
         puis on réactive le bluetooth pour détecter les possibles connections bluetooth.
@@ -88,7 +88,7 @@ class DotManager:
         self.previousConnected = self.devices
         return (check, unconnectedDevice)
     
-    def checkDevices(self) -> tuple[List[DotDevice], List[DotDevice]]:
+    def check_devices(self) -> tuple[List[DotDevice], List[DotDevice]]:
         """
         Détection des capteurs connectés en USB afin de capter un branchement ou un débranchement
         """
@@ -124,7 +124,7 @@ class DotManager:
             estimatedTime.append(device.getExportEstimatedTime())
         return np.max(estimatedTime)
 
-    def getDevices(self):
+    def get_devices(self):
         return self.devices
     
     def connectNewDevice(self, portInfoBt : XsPortInfo):

@@ -1,13 +1,16 @@
+from dataclasses import dataclass
+from datetime import datetime
 import os
 import sys
 from typing import List
+
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 import firebase_admin.firestore
 
-from dataclasses import dataclass
-from datetime import datetime
+from core.utils.connexion import has_internet_connection
+from core.utils.errors import InternetConnectionError, InvalidCertificateError
 
 @dataclass
 class JumpData:
@@ -116,22 +119,28 @@ class DatabaseManager:
     - 'dots'
     """
 
-    def __init__(self):
+    def __init__(self, certificate_path: str):
         """
         Initialize the DatabaseManager by checking for internet connectivity,
         setting up the Firebase app, and creating a Firestore client if connected.
 
         If there is no internet connection, display an error message and do not
         initialize the database.
+
+        Args:
+            certificate_path (str): The path to the Firebase certificate JSON file.
+
+        Raises:
         """
 
-        # Attempt to load the Firebase credentials from the PyInstaller bundle; if not present, load locally.
-        try:
-            json_path = os.path.join(sys._MEIPASS, 's2m-skating-firebase-adminsdk-3ofmb-cc861a6ad1.json')
-        except:
-            json_path = 's2m-skating-firebase-adminsdk-3ofmb-cc861a6ad1.json'
+        if not has_internet_connection():
+            raise InternetConnectionError()
 
-        cred = credentials.Certificate(json_path)
+        # Attempt to load the Firebase credentials from the PyInstaller bundle; if not present, load locally.
+        try: 
+            cred = credentials.Certificate(certificate_path)
+        except:
+            raise InvalidCertificateError()
 
         # Initialize the Firebase app if it hasn't been initialized yet.
         try:
