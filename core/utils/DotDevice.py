@@ -3,7 +3,7 @@ import os
 import sys
 from threading import Event
 import time
-from movelladot_pc_sdk.movelladot_pc_sdk_py39_64 import XsDotDevice, XsDotUsbDevice, XsDotConnectionManager, XsDotCallback, XsPortInfo, XsDataPacket
+from movelladot_pc_sdk.movelladot_pc_sdk_py310_64 import XsDotDevice, XsDotUsbDevice, XsDotConnectionManager, XsDotCallback, XsPortInfo, XsDataPacket
 import movelladot_pc_sdk
 import numpy as np
 import pandas as pd

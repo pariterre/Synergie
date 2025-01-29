@@ -1,0 +1,19 @@
+name: patinage
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - matplotlib
+  - numpy<2.0.0
+  - pandas
+  - scipy
+  - seaborn
+  - scikit-learn
+  - tk
+  - pip
+  - pip:
+    - firebase-admin
+    - tensorflow
+    - ttkbootstrap
+    - winsdk
+  

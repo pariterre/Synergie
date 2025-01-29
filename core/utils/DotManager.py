@@ -6,7 +6,7 @@ from core.database.DatabaseManager import DatabaseManager
 from core.utils.xdpchandler import *
 import asyncio
 if os.name == 'nt':
-    from winrt.windows.devices import radios
+    from winsdk.windows.devices import radios
 
 async def bluetooth_power(turn_on):
     all_radios = await radios.Radio.get_radios_async()
