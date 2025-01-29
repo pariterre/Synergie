@@ -3,6 +3,11 @@ import ttkbootstrap as ttkb
 from core.database.DatabaseManager import DatabaseManager
 
 class ConnectionPage:
+    """
+    The ConnectionPage class represents a login interface where the user enters their email address
+    to connect. This page checks if the user is a coach and, if so, allows them to access the rest
+    of the application.
+    """
     def __init__(self, root : ttkb.Window, dbManager : DatabaseManager) -> None:
         self.root = root
         self.dbManager = dbManager
@@ -31,6 +36,10 @@ class ConnectionPage:
         self.frame.grid(sticky="nswe")
     
     def register(self):
+        """
+        Attempt to find and authenticate the user by their email.
+        Checks internet connectivity before proceeding.
+        """
         userFound = self.dbManager.findUserByEmail(self.accountVar.get())
         if userFound != []:
             x = userFound[0]

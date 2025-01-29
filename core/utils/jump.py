@@ -1,17 +1,58 @@
 import numpy as np
 import pandas as pd
-
-import constants
-from constants import jumpType,jumpSuccess
 import math
 
+import constants
+from constants import jumpType, jumpSuccess
+
+
 class Jump:
-    def __init__(self, start: int, end: int, df: pd.DataFrame, combinate : bool, jump_type: jumpType = jumpType.NONE, jump_success: jumpSuccess = jumpSuccess.NONE):
+    """
+    Represents a single jump event within a skating session.
+
+    This class encapsulates all relevant data and computations related to a jump,
+    including its start and end frames, type, success status, duration, rotation,
+    and associated sensor data. It provides methods to calculate rotation, resize
+    the data frame for analysis, and export jump data to a CSV file.
+
+    Attributes:
+        start (int): The frame index where the jump starts.
+        end (int): The frame index where the jump ends.
+        type (jumpType): The type of the jump (e.g., Axel, Lutz). Defaults to jumpType.NONE.
+        success (jumpSuccess): The success status of the jump. Defaults to jumpSuccess.NONE.
+        combinate (bool): Indicates whether the jump is part of a combination.
+        startTimestamp (float): The timestamp (in seconds) when the jump starts relative to the session start.
+        endTimestamp (float): The timestamp (in seconds) when the jump ends relative to the session start.
+        length (float): The duration of the jump in seconds.
+        rotation (float): The absolute value of rotation in degrees around the vertical axis during the jump.
+        df (pd.DataFrame): The resized dataframe containing sensor data for the jump.
+        df_success (pd.DataFrame): Subset of `df` starting from frame index 120, potentially used for success analysis.
+        df_type (pd.DataFrame): Subset of `df` up to frame index 240, potentially used for type analysis.
+        max_rotation_speed (float): The maximum rotation speed recorded during the jump.
+    """
+
+    def __init__(
+        self,
+        start: int,
+        end: int,
+        df: pd.DataFrame,
+        combinate: bool,
+        jump_type: jumpType = jumpType.NONE,
+        jump_success: jumpSuccess = jumpSuccess.NONE,
+    ) -> None:
         """
-        :param start: the frame index where the jump starts
-        :param end: the frame index where the jump ends
-        :param df: the dataframe containing the session where the jump is
-        :param jump_type: the type of the jump (has to be set to NONE before annotation)
+        Initialize a Jump instance with specific parameters.
+
+        Args:
+            start (int): The frame index where the jump starts.
+            end (int): The frame index where the jump ends.
+            df (pd.DataFrame): The dataframe containing the session data where the jump occurs.
+            combinate (bool): Indicates whether the jump is part of a combination.
+            jump_type (jumpType, optional): The type of the jump. Defaults to jumpType.NONE.
+            jump_success (jumpSuccess, optional): The success status of the jump. Defaults to jumpSuccess.NONE.
+
+        Raises:
+            ValueError: If `start` or `end` indices are out of bounds of the dataframe.
         """
         self.start = start
         self.end = end
@@ -60,10 +101,16 @@ class Jump:
 
     def dynamic_resize(self, df: pd.DataFrame = None):
         """
-        normalize the jump to a given time frame. It takes 120 frames (2s) before the takeoff and 180 frames after (3s),
-        so that we have at least 120 frames (2s) after the landing.
-        :param df: the dataframe containing the session where the jump is
-        :return: the new dataframe
+        Normalize the jump data to a specific time frame by selecting frames around the jump.
+
+        The method ensures that there are at least 120 frames (2 seconds) before the takeoff
+        and 180 frames (3 seconds) after the landing to provide sufficient context for analysis.
+
+        Args:
+            df (pd.DataFrame, optional): The original dataframe containing session data.
+
+        Returns:
+            pd.DataFrame: A resized dataframe focused on the jump period with additional frames.
         """
         resampled_df = df[self.start - 120:self.start + 180].copy(deep=True)
 

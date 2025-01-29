@@ -14,14 +14,18 @@ from core.database.DatabaseManager import DatabaseManager, JumpData
 
 class DotDevice(XsDotCallback):
     """
-    Class permettant de gérer individuellement les capteurs, elle remplace les classes fournis par movella_pc_sdk :
-    XsDotDevice : capteur connecté en bluetooth
-    XsDotUsbDevice : capteur connecté en USB
-    Les deux classes sont fusionnéees dans celle-ci.
-    La classe est une extension de XsDotCallback qui permet d'avoir des retours des capteurs
+    Manages individual sensors (dots) connected via Bluetooth and USB.
     """
-    def __init__(self, portInfoUsb : XsPortInfo, portInfoBt : XsPortInfo, db_manager : DatabaseManager):
-        XsDotCallback.__init__(self)
+
+    def __init__(
+        self,
+        portInfoUsb: XsPortInfo,
+        portInfoBt: XsPortInfo,
+        db_manager: DatabaseManager,
+    ):
+        super().__init__()
+
+        self.is_recording = False  # Initialize early to prevent AttributeError
         self.portInfoUsb = portInfoUsb
         self.portInfoBt = portInfoBt
         self.db_manager = db_manager
@@ -36,8 +40,8 @@ class DotDevice(XsDotCallback):
             self.btManager = XsDotConnectionManager()
         self.btManager.addXsDotCallbackHandler(self)
 
-        self.usbDevice : XsDotUsbDevice = None
-        self.btDevice : XsDotDevice = None
+        self.usbDevice: XsDotUsbDevice = None
+        self.btDevice: XsDotDevice = None
         self.initializeUsb()
         self.initializeBt()
         self.deviceId = str(self.usbDevice.deviceId())
@@ -61,7 +65,10 @@ class DotDevice(XsDotCallback):
 
     def initializeBt(self):
         """
-        Initialise la connexion bluetooth
+        Initialize the Bluetooth connection
+
+        Raises:
+            Exception: If the connection to the device fails
         """
         self.btManager.closePort(self.portInfoBt)
         checkDevice = False
@@ -81,7 +88,7 @@ class DotDevice(XsDotCallback):
 
     def initializeUsb(self):
         """
-        Initialise la connexion USB
+        Initialize the USB connection
         """
         self.usbManager.closePort(self.portInfoUsb)
         device = None
@@ -92,7 +99,7 @@ class DotDevice(XsDotCallback):
     
     def loadImages(self):
         """
-        Charge les images des capteurs pour l'interface graphique
+        Load the images for the active and inactive states of the sensor.
         """
         fontTag = ImageFont.truetype(font="arialbd.ttf",size=60)
         try:
@@ -110,6 +117,7 @@ class DotDevice(XsDotCallback):
         imgActive = imgActive.resize((116, 139))
         self.imageActive = ImageTk.PhotoImage(imgActive)
 
+        # Load inactive image
         try:
             imgInactive = Image.open(f"{sys._MEIPASS}/img/Dot_inactive.png")
         except:
@@ -121,7 +129,7 @@ class DotDevice(XsDotCallback):
     
     def startRecord(self):
         """
-        Commence un enregistrement sur le capteur
+        Start recording on the sensor
         """
         self.isRecording = True
         if not self.btDevice.startRecording():
@@ -133,7 +141,7 @@ class DotDevice(XsDotCallback):
 
     def stopRecord(self):
         """
-        Arrête un enregistrement sur le capteur
+        Stop recording on the sensor
         """
         self.isRecording = False
         if not self.btDevice.stopRecording():
@@ -144,9 +152,14 @@ class DotDevice(XsDotCallback):
 
     def exportData(self, saveFile : bool, extractEvent : Event):
         """
-        Export les données du capteurs
-        saveFile : définis si on veut extraire toute les infos disponibles (et non seulement celle nécessaire aux modèles)
-        extractEvent : event pour informer le thread principale que l'extraction est finie
+        Export the sensor data
+
+        Args:
+        saveFile : Whether to save all available data (not just the data needed for the models)
+        extractEvent : Event to inform the main thread that the extraction is complete
+
+        Raises:
+        Exception: If the export fails
         """
         self.saveFile = saveFile
         print("Exporting...")
@@ -154,6 +167,7 @@ class DotDevice(XsDotCallback):
         self.packetsReceived = []
         self.count = 0
         exportData = movelladot_pc_sdk.XsIntArray()
+        # Define the types of data to export
         exportData.push_back(movelladot_pc_sdk.RecordingData_Timestamp)
         exportData.push_back(movelladot_pc_sdk.RecordingData_Euler)
         exportData.push_back(movelladot_pc_sdk.RecordingData_Acceleration)
@@ -163,9 +177,11 @@ class DotDevice(XsDotCallback):
             exportData.push_back(movelladot_pc_sdk.RecordingData_Quaternion)
             exportData.push_back(movelladot_pc_sdk.RecordingData_Status)
 
+        # Select the data types for export
         if not self.usbDevice.selectExportData(exportData):
             print(f'Could not select export data. Reason: {self.usbDevice.lastResultText()}')
 
+        # Iterate through each recording and export data
         for recordingIndex in range(1, self.usbDevice.recordingCount()+1):
             recInfo = self.usbDevice.getRecordingInfo(recordingIndex)
             if recInfo.empty():
@@ -200,10 +216,12 @@ class DotDevice(XsDotCallback):
                     os.makedirs(f"data/raw/{date}", exist_ok = True)
                     df.to_csv(f"data/raw/{date}/{self.synchroTime}_{trainingId}.csv", index=False)
 
+                    # Predict training data and update the database
                     self.predict_training(trainingId, df)
                     self.db_manager.remove_current_record(self.deviceId, trainingId)
                     self.recordingCount -= 1
         
+        # Erase sensor's flash memory after exporting
         self.usbDevice.eraseFlash()
         print("You can disconnect the dot")
         self.recordingCount = 0
@@ -213,7 +231,7 @@ class DotDevice(XsDotCallback):
     def predict_training(self, training_id : str, df : pd.DataFrame):
         from core.data_treatment.data_generation.exporter import export
         """
-        Utilisation des modèles de prédiction pour avoir les infos de l'enregistrement
+        Predict the training data and update the database
         """
         try:
             df = export(df)
@@ -249,7 +267,7 @@ class DotDevice(XsDotCallback):
         
     def onRecordedDataAvailable(self, device, packet : XsDataPacket):
         """
-        Lorsque le capteur est en train d'exporter les données, cette fonction permet de capter les informations renvoyées
+        Callback function that is called when data is available
         """
         self.count += 1
         euler = packet.orientationEuler()
@@ -263,16 +281,19 @@ class DotDevice(XsDotCallback):
     
     def onRecordedDataDone(self, device):
         """
-        Fonction qui s'active lorsque le capteur a fini d'extraire les données
+        Callback function that is called when the data are done recording
         """
         self.exportDone = True
     
     def __eq__(self, device) -> bool:
+        """
+        Check if two devices are the same
+        """
         return (self.usbDevice == device.usbDevice) and (self.btDevice == device.btDevice)
     
     def getExportEstimatedTime(self) -> int:
         """
-        Calcul une estimation du temps d'extraction
+        Get the estimated time to export
         """
         estimatedTime = 0
         for index in range(1,self.usbDevice.recordingCount()+1):
@@ -280,24 +301,27 @@ class DotDevice(XsDotCallback):
         return estimatedTime + 1
 
     def onBatteryUpdated(self, device: XsDotDevice, batteryLevel: int, chargingStatus: int):
+        """
+        Callback function that is called when the battery level is updated
+        """
         self.batteryLevel = batteryLevel
     
     def onButtonClicked(self, device: XsDotDevice, timestamp : int):
         """
-        Appuyer sur le bouton pendant l'enregistrement stocke l'instant pour pouvoir synchroniser avec une vidéo lors des collectes de données
+        Callback function that is called when the button is clicked
         """
         self.synchroTime = timestamp
 
     def closeUsb(self):
         """
-        Ferme la connexion USB
+        Close the USB connection
         """
         self.usbManager.closePort(self.portInfoUsb)
         self.isPlugged = False
     
     def openUsb(self):
         """
-        Ouvre la connexion USB
+        Open the USB connection
         """
         device = None
         while device is None:
