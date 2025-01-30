@@ -1,18 +1,9 @@
 from datetime import datetime
 import logging
 import os
-import sys
 from threading import Event
 import time
 
-from movelladot_pc_sdk.movelladot_pc_sdk_py310_64 import (
-    XsDotDevice,
-    XsDotUsbDevice,
-    XsDotConnectionManager,
-    XsDotCallback,
-    XsPortInfo,
-    XsDataPacket,
-)
 import movelladot_pc_sdk
 import numpy as np
 import pandas as pd
@@ -20,19 +11,20 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 import constants
 from core.database.DatabaseManager import DatabaseManager, JumpData
+from .movella_loader import movelladot_sdk
 
 _logger = logging.getLogger(__name__)
 
 
-class DotDevice(XsDotCallback):
+class DotDevice(movelladot_sdk.XsDotCallback):
     """
     Manages individual sensors (dots) connected via Bluetooth and USB.
     """
 
     def __init__(
         self,
-        port_info_usb: XsPortInfo,
-        port_info_bluetooth: XsPortInfo,
+        port_info_usb: movelladot_sdk.XsPortInfo,
+        port_info_bluetooth: movelladot_sdk.XsPortInfo,
         database_manager: DatabaseManager,
     ):
         super().__init__()
@@ -40,19 +32,19 @@ class DotDevice(XsDotCallback):
         self._database_manager = database_manager
 
         self._port_info_usb = port_info_usb
-        self._usb_manager = XsDotConnectionManager()
+        self._usb_manager = movelladot_sdk.XsDotConnectionManager()
         while self._usb_manager is None:
-            self._usb_manager = XsDotConnectionManager()
+            self._usb_manager = movelladot_sdk.XsDotConnectionManager()
         self._usb_manager.addXsDotCallbackHandler(self)
-        self._usb_device: XsDotUsbDevice = None
+        self._usb_device: movelladot_sdk.XsDotUsbDevice = None
         self._initialize_usb()
 
         self._port_info_bluetooth = port_info_bluetooth
-        self._bluetooth_manager = XsDotConnectionManager()
+        self._bluetooth_manager = movelladot_sdk.XsDotConnectionManager()
         while self._bluetooth_manager is None:
-            self._bluetooth_manager = XsDotConnectionManager()
+            self._bluetooth_manager = movelladot_sdk.XsDotConnectionManager()
         self._bluetooth_manager.addXsDotCallbackHandler(self)
-        self._bluetooth_device: XsDotDevice = None
+        self._bluetooth_device: movelladot_sdk.XsDotDevice = None
         self._initialize_bluetooth()
 
         self._is_recording = self._usb_device.recordingCount() == -1
@@ -123,7 +115,7 @@ class DotDevice(XsDotCallback):
         while True:
             self._bluetooth_manager.closePort(self._port_info_bluetooth)
             if self._bluetooth_manager.openPort(self._port_info_bluetooth):
-                device: XsDotDevice = self._bluetooth_manager.device(
+                device: movelladot_sdk.XsDotDevice = self._bluetooth_manager.device(
                     self._port_info_bluetooth.deviceId()
                 )
                 if device:
@@ -430,7 +422,7 @@ class DotDevice(XsDotCallback):
         except Exception as e:
             _logger.error(f"Error during prediction training: {e}")
 
-    def onRecordedDataAvailable(self, device, packet: XsDataPacket):
+    def onRecordedDataAvailable(self, device, packet: movelladot_sdk.XsDataPacket):
         """
         Callback function that is called when data is available
         """
@@ -495,7 +487,7 @@ class DotDevice(XsDotCallback):
         return estimatedTime + 1
 
     def onBatteryUpdated(
-        self, device: XsDotDevice, battery_level: int, charging_status: int
+        self, device: movelladot_sdk.XsDotDevice, battery_level: int, charging_status: int
     ):
         """
         Callback function that is called when the battery level is updated
@@ -505,7 +497,7 @@ class DotDevice(XsDotCallback):
             f"Battery level updated: {battery_level}%, Charging: {self._is_battery_charging}"
         )
 
-    def onButtonClicked(self, device: XsDotDevice, timestamp: int):
+    def onButtonClicked(self, device: movelladot_sdk.XsDotDevice, timestamp: int):
         """
         Callback function that is called when the button is clicked
         """

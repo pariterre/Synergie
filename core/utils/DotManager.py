@@ -1,12 +1,20 @@
+import logging
 import os
+import time
 
 import numpy as np
 from core.utils.DotDevice import DotDevice
 from core.database.DatabaseManager import DatabaseManager
-from core.utils.xdpchandler import *
+from core.utils.xdpchandler import XdpcHandler
 import asyncio
 if os.name == 'nt':
     from winsdk.windows.devices import radios
+
+from .movella_loader import movelladot_sdk
+
+
+_logger = logging.getLogger(__name__)
+
 
 async def bluetooth_power(turn_on):
     all_radios = await radios.Radio.get_radios_async()
@@ -24,10 +32,10 @@ class DotManager:
     def __init__(self, db_manager : DatabaseManager) -> None:
         self.db_manager = db_manager
         self.error = False
-        self.devices : List[DotDevice] = []
-        self.previousConnected : List[DotDevice] = []
+        self.devices : list[DotDevice] = []
+        self.previousConnected : list[DotDevice] = []
 
-    def first_connection(self) -> tuple[bool, List[str]]:
+    def first_connection(self) -> tuple[bool, list[str]]:
         """
         Première connexion aux capteurs, pour cela on désactive d'abord le bluetooth pour se connecter en USB aux capteurs,
         puis on réactive le bluetooth pour détecter les possibles connections bluetooth.
@@ -88,11 +96,11 @@ class DotManager:
         self.previousConnected = self.devices
         return (check, unconnectedDevice)
     
-    def check_devices(self) -> tuple[List[DotDevice], List[DotDevice]]:
+    def check_devices(self) -> tuple[list[DotDevice], list[DotDevice]]:
         """
         Détection des capteurs connectés en USB afin de capter un branchement ou un débranchement
         """
-        connected : List[DotDevice] = []
+        connected : list[DotDevice] = []
         for device in self.devices:
             if device._bluetooth_device.isCharging():
                 connected.append(device)
@@ -127,11 +135,11 @@ class DotManager:
     def get_devices(self):
         return self.devices
     
-    def connectNewDevice(self, portInfoBt : XsPortInfo):
+    def connectNewDevice(self, portInfoBt : movelladot_sdk.XsPortInfo):
         """
         Ajoute un capteur à la base de données
         """
-        manager = XsDotConnectionManager()
+        manager = movelladot_sdk.XsDotConnectionManager()
         checkDevice = False
         while not checkDevice:
             manager.closePort(portInfoBt)
@@ -139,7 +147,7 @@ class DotManager:
                 print(f"Connection to Device {portInfoBt.bluetoothAddress()} failed")
                 checkDevice = False
             else:
-                device : XsDotDevice = manager.device(portInfoBt.deviceId())
+                device : movelladot_sdk.XsDotDevice = manager.device(portInfoBt.deviceId())
                 if device is None:
                     checkDevice = False
                 else:
