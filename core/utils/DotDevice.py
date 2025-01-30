@@ -16,6 +16,27 @@ from .movella_loader import movelladot_sdk
 _logger = logging.getLogger(__name__)
 
 
+def initialize_bluetooth_dot_device(
+        bluetooth_manager: movelladot_sdk.XsDotConnectionManager, 
+        port_info_bluetooth: movelladot_sdk.XsPortInfo,
+    ) -> movelladot_sdk.XsDotDevice:
+    """
+    Initialize the Bluetooth connection
+
+    Raises:
+        Exception: If the connection to the device fails
+    """
+    while True:
+        bluetooth_manager.closePort(port_info_bluetooth)
+        if bluetooth_manager.openPort(port_info_bluetooth):
+            device: movelladot_sdk.XsDotDevice = bluetooth_manager.device(port_info_bluetooth.deviceId())
+            if device:
+                time.sleep(1)
+                if device.deviceTagName() and device.batteryLevel():
+                    return device
+        _logger.warning(f"Bluetooth device {port_info_bluetooth.bluetoothAddress()} failed, retrying...")
+
+
 class DotDevice(movelladot_sdk.XsDotCallback):
     """
     Manages individual sensors (dots) connected via Bluetooth and USB.
@@ -45,7 +66,9 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             self._bluetooth_manager = movelladot_sdk.XsDotConnectionManager()
         self._bluetooth_manager.addXsDotCallbackHandler(self)
         self._bluetooth_device: movelladot_sdk.XsDotDevice = None
-        self._initialize_bluetooth()
+        self._bluetooth_device = initialize_bluetooth_dot_device(
+            bluetooth_manager=self._bluetooth_manager, port_info_bluetooth=self._port_info_bluetooth
+        )
 
         self._is_recording = self._usb_device.recordingCount() == -1
         if self._is_recording:
@@ -104,29 +127,6 @@ class DotDevice(movelladot_sdk.XsDotCallback):
     @property
     def recording_count(self) -> int:
         return self._recording_count
-
-    def _initialize_bluetooth(self):
-        """
-        Initialize the Bluetooth connection
-
-        Raises:
-            Exception: If the connection to the device fails
-        """
-        while True:
-            self._bluetooth_manager.closePort(self._port_info_bluetooth)
-            if self._bluetooth_manager.openPort(self._port_info_bluetooth):
-                device: movelladot_sdk.XsDotDevice = self._bluetooth_manager.device(
-                    self._port_info_bluetooth.deviceId()
-                )
-                if device:
-                    time.sleep(1)
-                    if device.deviceTagName() and device.batteryLevel():
-                        break
-            _logger.warning(
-                f"Bluetooth device {self._port_info_bluetooth.bluetoothAddress()} not found, retrying..."
-            )
-
-        self._bluetooth_device = device
 
     def _initialize_usb(self):
         """
@@ -189,7 +189,9 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             _logger.warning(
                 "Failed to start recording on Bluetooth device. Trying to reconnect once..."
             )
-            self._initialize_bluetooth()
+            self._bluetooth_device = initialize_bluetooth_dot_device(
+                bluetooth_manager=self._bluetooth_manager, port_info_bluetooth=self._port_info_bluetooth
+            )
             if not self._bluetooth_device.startRecording():
                 _logger.warning("Failed to start recording on Bluetooth device.")
                 return False
@@ -211,7 +213,9 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             _logger.warning(
                 "Failed to stop recording on Bluetooth device. Trying to reconnect once..."
             )
-            self._initialize_bluetooth()
+            self._bluetooth_device = initialize_bluetooth_dot_device(
+                bluetooth_manager=self._bluetooth_manager, port_info_bluetooth=self._port_info_bluetooth
+            )
             if not self._bluetooth_device.stopRecording():
                 _logger.warning("Failed to stop recording on Bluetooth device.")
                 return False
@@ -476,7 +480,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             self._bluetooth_device == device.btDevice
         )
 
-    def getExportEstimatedTime(self) -> int:
+    def get_export_estimated_time(self) -> int:
         """
         Get the estimated time to export
         """
@@ -504,7 +508,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         self._synchro_time = timestamp
         _logger.info(f"Button clicked at timestamp: {self._synchro_time}")
 
-    def closeUsb(self):
+    def close_usb(self):
         """
         Close the USB connection
         """
@@ -512,7 +516,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         self._is_plugged = False
         _logger.info("USB connection closed.")
 
-    def openUsb(self):
+    def open_usb(self):
         """
         Open the USB connection
         """

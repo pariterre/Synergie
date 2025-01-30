@@ -33,7 +33,7 @@ class StopingPage:
         buttonStyle = ttkb.Style()
         buttonStyle.configure('my.TButton', font=Font(self.frame, size=12, weight=BOLD))
         ttkb.Button(self.frame, text="Arrêt", style="my.TButton", command=self.stopRecord).grid(row=1,column=0,sticky="nsew",pady=20)
-        self.estimatedTime = self.device.getExportEstimatedTime()
+        self.estimatedTime = self.device.get_export_estimated_time()
         ttkb.Button(self.frame, text=f"Arrêt et extraction des données \n Temps estimé : {round(self.estimatedTime,0)} min", style="my.TButton", command=self.stopRecordAndExtract).grid(row=2,column=0,sticky="nsew")
         self._save_data_to_file = ttkb.Checkbutton(self.frame, text="Sauvegarder plus de données (pour la recherche)")
         self._save_data_to_file.state(['!alternate'])

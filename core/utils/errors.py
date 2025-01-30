@@ -13,3 +13,20 @@ class InvalidCertificateError(Exception):
 
     def __str__(self):
         return self.message
+    
+class BluetoothCommunicationError(Exception):
+    def __init__(self):
+        self.message = "Bluetooth communication error"
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message
+    
+class MissingSensorsError(Exception):
+    def __init__(self, sensor_names: list[str]):
+        self.sensor_names = sensor_names
+        self.message = "Missing sensors: " + ", ".join(self.sensor_names)
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message

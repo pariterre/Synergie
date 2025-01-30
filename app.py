@@ -9,7 +9,7 @@ import ttkbootstrap as ttkb
 
 # TODO Move this in a synergy package
 from core.database.DatabaseManager import DatabaseManager
-from core.utils.errors import InternetConnectionError, InvalidCertificateError
+from core.utils.errors import InternetConnectionError, InvalidCertificateError, BluetoothCommunicationError, MissingSensorsError
 from core.utils.DotManager import DotManager
 from front.ConnectionPage import ConnectionPage
 from front.MainPage import MainPage
@@ -64,7 +64,15 @@ class App:
         self.connectionPage = ConnectionPage(self.root, self.db_manager)
 
         # Check periodically if the user has logged in.
-        self.checkConnection()
+        try:
+            self.checkConnection()
+        except BluetoothCommunicationError:
+            _logger.error("Bluetooth communication error")
+            messagebox.showerror(
+                "Erreur de Communication Bluetooth", 
+                "Une erreur de communication Bluetooth est survenue. Veuillez vérifier vos appareils et relancer l'application."
+            )
+            exit()
 
     def checkConnection(self):
         """
@@ -124,20 +132,16 @@ class App:
         Args:
             initialEvent (threading.Event): An event to set once initialization is done.
         """
-        (check, unconnectedDevice) = self.dot_manager.first_connection()
+        while True:
+            try:
+                self.dot_manager.initialize_connexion()
+                break
+            except MissingSensorsError as e:
+                _logger.error(f"Missing sensors: {e.sensor_names}")
+                messagebox.showerror(
+                    "Capteurs Manquants", f"Veuillez reconnecter les capteurs : {', '.join(e.sensor_names)}"
+                )
         
-        # If not all devices are connected, prompt user to reconnect missing devices.
-        while not check:
-            deviceMessage = f"{unconnectedDevice[0]}"
-            for deviceTag in unconnectedDevice[1:]:
-                deviceMessage += f", {deviceTag}"
-            # Ask the user to retry the connection for missing devices.
-            retry = messagebox.askretrycancel("Connexion", f"Veuillez reconnecter les capteurs {deviceMessage}")
-            if not retry:
-                # User chose to cancel; exit the initialization loop.
-                return
-            (check, unconnectedDevice) = self.dot_manager.first_connection()
-
         # Now that all devices are connected, check if any are currently recording.
         devices = self.dot_manager.get_devices()
         for device in devices:
@@ -148,44 +152,28 @@ class App:
 
         
         # Start a separate thread to monitor device connections/disconnections.
+        # TODO This should be done by the DotManager
         usb_detection_thread = threading.Thread(
-            target=self.checkUsbDots,
-            args=([self.startStopping, self.startStarting]),
+            target=self.check_usb_dots,
+            args=([self.startStarting, self.startStopping]),
             daemon=True,
         )
         usb_detection_thread.start()
 
-    def checkUsbDots(self, callbackStop, callbackStart):
+    def check_usb_dots(self, start_recording_callback, stop_recording_callback):
         """
         Continuously monitor device connection status. If a device is connected
         while recording, stop it and notify the user. If a device is disconnected while
         not recording, start it.
 
         Args:
-            callbackStop (function): Function to call when a recording device reconnects.
-            callbackStart (function): Function to call when a non-recording device disconnects.
+            start_recording_callback (function): Function to call when a non-recording device disconnects.
+            stop_recording_callback (function): Function to call when a recording device reconnects.
         """
+
         while True:
             # Check the status of devices.
-            checkUsb = self.dot_manager.check_devices()
-            lastConnected = checkUsb[0]    # Devices that got connected since last check.
-            lastDisconnected = checkUsb[1] # Devices that got disconnected since last check.
-
-            # If any devices have been connected, check if they need to be stopped.
-            if lastConnected:
-                _logger.info("Connexion")
-                for device in lastConnected:
-                    # If device is currently recording or has pending records, stop it.
-                    if device.is_recording or device.recording_count > 0:
-                        callbackStop(device)
-
-            # If any devices have been disconnected, check if we should start them.
-            if lastDisconnected:
-                _logger.info("Deconnexion")
-                for device in lastDisconnected:
-                    # If device is not currently recording, start it.
-                    if not device.is_recording:
-                        callbackStart(device)
+            self.dot_manager.check_plug_statuses(start_recording_callback=start_recording_callback, stop_recording_callback=stop_recording_callback)
 
             # Wait a short time before checking again.
             time.sleep(0.2)
