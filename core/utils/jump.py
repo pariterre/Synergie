@@ -3,7 +3,7 @@ import pandas as pd
 import math
 
 import constants
-from constants import jumpType, jumpSuccess
+from constants import JumpType, jumpSuccess
 
 
 class Jump:
@@ -37,7 +37,7 @@ class Jump:
         end: int,
         df: pd.DataFrame,
         combinate: bool,
-        jump_type: jumpType = jumpType.NONE,
+        jump_type: JumpType = JumpType.NONE,
         jump_success: jumpSuccess = jumpSuccess.NONE,
     ) -> None:
         """

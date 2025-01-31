@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='img/logo_s2mJUMP_RGB.ico'
+    icon='resources/img/logo_s2mjump_rgb.ico'
 )

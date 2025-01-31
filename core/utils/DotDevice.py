@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 import constants
 from core.database.DatabaseManager import DatabaseManager, JumpData
+from .errors import UsbCommunicationError
 from .movella_loader import movelladot_sdk
 
 _logger = logging.getLogger(__name__)
@@ -27,14 +28,16 @@ def initialize_bluetooth_dot_device(
         Exception: If the connection to the device fails
     """
     while True:
-        bluetooth_manager.closePort(port_info_bluetooth)
+        _logger.warning(f"Connecting to bluetooth device {port_info_bluetooth.bluetoothAddress()}...")
+        bluetooth_manager.closePort(port_info_bluetooth)    
         if bluetooth_manager.openPort(port_info_bluetooth):
             device: movelladot_sdk.XsDotDevice = bluetooth_manager.device(port_info_bluetooth.deviceId())
             if device:
                 time.sleep(1)
                 if device.deviceTagName() and device.batteryLevel():
                     return device
-        _logger.warning(f"Bluetooth device {port_info_bluetooth.bluetoothAddress()} failed, retrying...")
+        _logger.warning(f"connexion failed, retrying...")
+        time.sleep(0.1)
 
 
 class DotDevice(movelladot_sdk.XsDotCallback):
@@ -51,13 +54,16 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         super().__init__()
 
         self._database_manager = database_manager
+        self._usb_device: movelladot_sdk.XsDotUsbDevice = None
+        self._bluetooth_device: movelladot_sdk.XsDotDevice = None
 
         self._port_info_usb = port_info_usb
         self._usb_manager = movelladot_sdk.XsDotConnectionManager()
         while self._usb_manager is None:
             self._usb_manager = movelladot_sdk.XsDotConnectionManager()
         self._usb_manager.addXsDotCallbackHandler(self)
-        self._usb_device: movelladot_sdk.XsDotUsbDevice = None
+        self._is_battery_charging = False
+        self._is_plugged = False
         self._initialize_usb()
 
         self._port_info_bluetooth = port_info_bluetooth
@@ -65,7 +71,6 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         while self._bluetooth_manager is None:
             self._bluetooth_manager = movelladot_sdk.XsDotConnectionManager()
         self._bluetooth_manager.addXsDotCallbackHandler(self)
-        self._bluetooth_device: movelladot_sdk.XsDotDevice = None
         self._bluetooth_device = initialize_bluetooth_dot_device(
             bluetooth_manager=self._bluetooth_manager, port_info_bluetooth=self._port_info_bluetooth
         )
@@ -75,8 +80,6 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             self._recording_count = 0
         else:
             self._recording_count = self._usb_device.recordingCount()
-        self._is_battery_charging = False
-        self._is_plugged = True
         self._timing_record = datetime.now().timestamp()
 
         self._load_images()
@@ -88,9 +91,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         self._synchro_time = 0
         self._export_done = False
 
-        _logger.info(
-            f"DotDevice initialized: {self.device_tag_name} (ID: {self.deviceId})"
-        )
+        _logger.info(f"DotDevice initialized: {self.device_tag_name} (ID: {self.device_id})")
 
     @property
     def is_recording(self) -> bool:
@@ -98,7 +99,14 @@ class DotDevice(movelladot_sdk.XsDotCallback):
 
     @property
     def device_id(self) -> str:
-        return str(self._usb_device.deviceId())
+        # We prioritize the bluetooth device ID as the id seems more consistent (and USB is not always plugged in)
+        if self._bluetooth_device:
+            return str(self._bluetooth_device.deviceId())
+        
+        if self._usb_device:
+            return str(self._usb_device.deviceId())
+        
+        raise RuntimeError("No device connected")
 
     @property
     def device_tag_name(self) -> str:
@@ -133,45 +141,38 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         Initialize the USB connection
         """
 
-        if hasattr(self._port_info_usb, "serial"):
-            serial_info = self._port_info_usb.serial
-        elif hasattr(self._port_info_usb, "serialNumber"):
-            serial_info = self._port_info_usb.serialNumber
-        else:
-            serial_info = "Unknown Serial"
-
         self._usb_manager.closePort(self._port_info_usb)
         while True:
             self._usb_manager.openPort(self._port_info_usb)
             device = self._usb_manager.usbDevice(self._port_info_usb.deviceId())
             if device:
                 break
-            _logger.warning(f"Connection to USB Device {serial_info} failed")
+            _logger.warning(f"Connection to USB Device {self._port_info_usb.deviceId()} failed")
 
-        _logger.info(f"USB connection established with device ID: {self.device_id}")
         self._usb_device = device
-        self.is_plugged = True
+        _logger.info(f"USB connection established with device ID: {self.device_id}")
+        self._is_plugged = True
+        self._is_battery_charging = True  # Assume the device is connected therefore charging
 
     def _load_images(self):
         """
         Load the images for the active and inactive states of the sensor.
         """
-        base_folder = os.path.dirname(
-            __file__
-        )  # TODO : This can be changed to relative with a proper packaging
+        # TODO : This can be changed to relative with a proper packaging
+        base_folder = os.path.dirname(__file__)  
         font_tag = ImageFont.truetype(font="arialbd.ttf", size=60)
 
         text = self.device_tag_name
         text_offset_x = 93 if len(text) == 1 else 75
 
-        img_active = Image.open(f"{base_folder}/resources/img/dot_active.png")
+        img_active = Image.open(f"{base_folder}/../../resources/img/dot_active.png")
         d = ImageDraw.Draw(img_active)
         d.text((text_offset_x, 65), text, font=font_tag, fill="black")
         img_active = img_active.resize((116, 139))
         self._image_active = ImageTk.PhotoImage(img_active)
 
         # Load inactive image
-        img_inactive = Image.open(f"{base_folder}/resources/img/dot_inactive.png")
+        img_inactive = Image.open(f"{base_folder}/../../resources/img/dot_inactive.png")
         d = ImageDraw.Draw(img_inactive)
         d.text((text_offset_x, 65), text, font=font_tag, fill="black")
         img_inactive = img_inactive.resize((116, 139))
@@ -185,16 +186,13 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         bool: Whether the recording was started successfully
         """
 
-        if not self._bluetooth_device.startRecording():
-            _logger.warning(
-                "Failed to start recording on Bluetooth device. Trying to reconnect once..."
-            )
-            self._bluetooth_device = initialize_bluetooth_dot_device(
-                bluetooth_manager=self._bluetooth_manager, port_info_bluetooth=self._port_info_bluetooth
-            )
-            if not self._bluetooth_device.startRecording():
-                _logger.warning("Failed to start recording on Bluetooth device.")
-                return False
+        if self._bluetooth_device.deviceState() == 4:
+            pass
+        else:
+            is_success = self._bluetooth_device.startRecording()
+            if not is_success:
+                _logger.error("Something went wrong while trying to start recording on the Bluetooth device.")
+                return
 
         self._timing_record = datetime.now().timestamp()
         self._is_recording = True
@@ -209,16 +207,11 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         bool: Whether the recording was stopped successfully
         """
 
-        if not self._bluetooth_device.stopRecording():
-            _logger.warning(
-                "Failed to stop recording on Bluetooth device. Trying to reconnect once..."
-            )
-            self._bluetooth_device = initialize_bluetooth_dot_device(
-                bluetooth_manager=self._bluetooth_manager, port_info_bluetooth=self._port_info_bluetooth
-            )
-            if not self._bluetooth_device.stopRecording():
-                _logger.warning("Failed to stop recording on Bluetooth device.")
-                return False
+        if self._bluetooth_device.deviceState() == 4:
+            is_success = self._bluetooth_device.stopRecording()
+            if not is_success:
+                _logger.error("Something went wrong while trying to stop recording on the Bluetooth device.")
+                return
 
         self._is_recording = False
         self._recording_count = self._usb_device.recordingCount()
@@ -472,13 +465,12 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         """
         self._export_done = True
 
-    def __eq__(self, device) -> bool:
+    def __eq__(self, device: "DotDevice") -> bool:
         """
         Check if two devices are the same
         """
-        return (self._usb_device == device.usbDevice) and (
-            self._bluetooth_device == device.btDevice
-        )
+        return self._usb_device == device._usb_device and self._bluetooth_device == device._bluetooth_device
+        
 
     def get_export_estimated_time(self) -> int:
         """
@@ -510,32 +502,35 @@ class DotDevice(movelladot_sdk.XsDotCallback):
 
     def close_usb(self):
         """
-        Close the USB connection
+        Close the USB connexion
         """
+        if not self._is_plugged:
+            return
+
         self._usb_manager.closePort(self._port_info_usb)
         self._is_plugged = False
-        _logger.info("USB connection closed.")
+        _logger.info("USB connexion closed.")
 
     def open_usb(self):
         """
-        Open the USB connection
+        Open the USB connexion
         """
-        if hasattr(self._port_info_usb, "serial"):
-            serial_info = self._port_info_usb.serial
-        elif hasattr(self._port_info_usb, "serialNumber"):
-            serial_info = self._port_info_usb.serialNumber
-        else:
-            serial_info = "Unknown Serial"
 
-        while True:
-            self._usb_manager.openPort(self._port_info_usb)
-            device = self._usb_manager.usbDevice(self._port_info_usb.deviceId())
-            if device:
-                break
-            _logger.warning(f"Connection to USB Device {serial_info} failed")
+        if self._is_plugged:
+            return
 
+        is_success = self._usb_manager.openPort(self._port_info_usb)
+        if not is_success:
+            _logger.error(f"Connexion to USB Device {self._port_info_usb.deviceId()} failed")
+            raise UsbCommunicationError()
+        
+        device = self._usb_manager.usbDevice(self._port_info_usb.deviceId())
+        if not device:
+            _logger.error(f"Connexion to USB Device {self._port_info_usb.deviceId()} failed")
+            raise UsbCommunicationError()
+        
         self._usb_device = device
-        _logger.info("USB connection opened.")
+        _logger.info(f"USB connexion established with device ID: {self.device_id}")
 
         if self.is_recording:
             _logger.info("USB device is currently recording. Stopping recording...")

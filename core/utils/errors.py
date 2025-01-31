@@ -13,7 +13,15 @@ class InvalidCertificateError(Exception):
 
     def __str__(self):
         return self.message
-    
+
+class UsbCommunicationError(Exception):
+    def __init__(self):
+        self.message = "USB communication error"
+        super().__init__(self.message)
+
+    def __str__(self):
+        return self.message    
+
 class BluetoothCommunicationError(Exception):
     def __init__(self):
         self.message = "Bluetooth communication error"

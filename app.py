@@ -214,7 +214,7 @@ if __name__ == "__main__":
     root.geometry(f"{width}x{height}")
 
     # Try to load the application icon from the PyInstaller bundle or from a local path.
-    ico = Image.open('resources/img/Logo_s2mJUMP_RGB.png')
+    ico = Image.open('resources/img/logo_s2mjump_rgb.png')
 
     photo = ImageTk.PhotoImage(ico)
     root.wm_iconphoto(False, photo)
