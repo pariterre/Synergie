@@ -87,6 +87,10 @@ class Jump:
         self._max_rotation_speed = round(data["Gyr_X_unfiltered"][start:end].abs().max() / 360, 1)
 
     @property
+    def type(self) -> JumpType:
+        return self._type
+
+    @property
     def start_timestamp(self) -> float:
         return self._start_timestamp
 

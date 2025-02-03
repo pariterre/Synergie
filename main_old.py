@@ -2,16 +2,15 @@ import os
 import sys
 
 import numpy as np
-import pandas as pd
 
-from keras_tuner import BayesianOptimization
 import keras
+from keras_tuner import BayesianOptimization
 
 import synergie.core.utils.constants as constants
-from core.data_treatment.data_generation.exporter import export, old_export
-from core.database.DatabaseManager import DatabaseManager, JumpData
-from core.model import model
-from core.model.training.loader import Loader
+from synergie.core.database.database_manager import DatabaseManager, JumpData
+from synergie.core.data_treatment.data_generation.exporter import export, old_export
+from synergie.core.model import model
+from synergie.core.model.training.loader import Loader
 
 
 def main():
@@ -50,16 +49,16 @@ def main():
             trainer.train_success(epochs=20)
 
     if "-repredict" in sys.argv:
-        db_manager = DatabaseManager()
+        database_manager = DatabaseManager()
         for day in os.listdir("data/raw"):
             print(day)
             for training in os.listdir(f"data/raw/{day}"):
                 training_id = training.replace(".csv", "").split("_")[1]
                 df = export(df)
-                trainingJumps = []
+                training_jumps = []
                 unknow_rotation = []
-                db_manager.add_jumps_to_training(training_id, trainingJumps)
-                for iter, row in df.iterrows():
+                database_manager.add_jumps_to_training(training_id, training_jumps)
+                for _, row in df.iterrows():
                     jump_time_min, jump_time_sec = row["videoTimeStamp"].split(":")
                     jump_time = "{:02d}:{:02d}".format(int(jump_time_min), int(jump_time_sec))
                     val_rot = float(row["rotations"])
@@ -71,19 +70,19 @@ def main():
                         jump_data = JumpData(
                             0,
                             training_id,
-                            constants.jumpType(int(row["type"])).name,
+                            constants.JumpType(int(row["type"])).name,
                             val_rot,
                             bool(row["success"]),
                             jump_time,
                             float(row["rotation_speed"]),
                             float(row["length"]),
                         )
-                        trainingJumps.append(jump_data.to_dict())
+                        training_jumps.append(jump_data.to_dict())
                     else:
                         jump_data = JumpData(
                             0,
                             training_id,
-                            constants.jumpType(int(row["type"])).name,
+                            constants.JumpType(int(row["type"])).name,
                             0,
                             bool(row["success"]),
                             jump_time,
@@ -91,12 +90,12 @@ def main():
                             float(row["length"]),
                         )
                         unknow_rotation.append(jump_data)
-                if trainingJumps != []:
-                    db_manager.add_jumps_to_training(training_id, trainingJumps)
+                if training_jumps != []:
+                    database_manager.add_jumps_to_training(training_id, training_jumps)
                 else:
                     for jump in unknow_rotation:
-                        trainingJumps.append(jump.to_dict())
-                    db_manager.add_jumps_to_training(training_id, trainingJumps)
+                        training_jumps.append(jump.to_dict())
+                    database_manager.add_jumps_to_training(training_id, training_jumps)
 
     if "-rep" in sys.argv:
         for session in constants.sessions.values():
@@ -109,17 +108,17 @@ def main():
         path = "data/annotated/total/"
         dataset = Loader(path).get_type_data()
         tuner = BayesianOptimization(
-            model.transformerTraining,
+            model.transformer_training,
             objective="val_accuracy",
             max_trials=10,
             directory="hptrain",
             project_name="transformer_tuning",
         )
         tuner.search(
-            dataset.features_train,
+            dataset.temporal_features_train,
             dataset.labels_train,
             epochs=50,
-            validation_data=(dataset.features_test, dataset.labels_test),
+            validation_data=(dataset.temporal_features_test, dataset.labels_test),
         )
 
         best_model = tuner.get_best_models(num_models=1)[0]

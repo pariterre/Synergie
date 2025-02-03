@@ -1,5 +1,6 @@
 import keras
 from keras import layers
+import keras_tuner
 
 
 def lstm():
@@ -143,7 +144,7 @@ def transformer(
     return model
 
 
-def transformer_training(hyper_parameters):
+def transformer_training(hyper_parameters: keras_tuner.HyperParameters):
     """
     Build and compile a Transformer model for hyperparameter tuning.
 

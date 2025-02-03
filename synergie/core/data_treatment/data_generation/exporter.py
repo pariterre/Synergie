@@ -1,7 +1,9 @@
 import copy
+import os
 
 import pandas as pd
 
+from ...database.database_manager import DatabaseManager
 from ...utils import constants
 from ...utils.jump import Jump
 
@@ -64,3 +66,56 @@ def export(df: pd.DataFrame, sample_time_fine_synchro: int = 0) -> pd.DataFrame:
     jumps_as_df = jumps_as_df.sort_values(by=["videoTimeStamp"])
 
     return jumps_as_df
+
+
+def old_export():
+    from .training_session import trainingSession
+
+    """
+    exports the data to a folder, in order to be used by the ML model
+    :param folder_name: the folder where to export the data
+    :param sampleTimeFineSynchro: the timefinesample of the synchro tap
+    :return:
+    """
+    all_jumps: dict[str, Jump] = []
+    database_manager = DatabaseManager()
+
+    for training in os.listdir("data/new"):
+        if os.path.isfile(f"data/new/{training}"):
+            synchro, training_id = training.replace(".csv", "").split("_")
+            synchro = int(synchro)
+            skater_name = database_manager.get_skater_name_from_training_id(training_id)
+            df = pd.read_csv(f"data/new/{training}")
+
+            session = trainingSession(df, synchro)
+
+            for jump in session.jumps:
+                jump_copy = copy.deepcopy(jump)
+                # jump_copy.skater_name = skater_name
+                # jump_copy.df = jump.df.copy(deep=True)
+                all_jumps[skater_name] = jump_copy
+
+    jumps = []
+    for skater_name, jump in all_jumps.items():
+        if jump.data is None:
+            continue
+        jump_id = f"{skater_name}_{jump.start_timestamp}"
+        if jump_id != "0":
+            filename = os.path.join(f"data/pending{jump_id}.csv")
+            jump.data.to_csv(filename)
+            # since videoTimeStamp is for user input, I can change it's value to whatever I want
+            jumps.append(
+                {
+                    "path": f"{jump_id}.csv",
+                    "videoTimeStamp": mstostr(jump.start_timestamp),
+                    "type": jump.type.value,
+                    "skater": skater_name,
+                    "sucess": 2,
+                    "rotations": "{:.1f}".format(jump.rotation),
+                }
+            )
+
+    jumps_as_df = pd.DataFrame(jumps)
+    jumps_as_df = jumps_as_df.sort_values(by=["videoTimeStamp"]).reset_index(drop=True)
+
+    jumps_as_df.to_csv("data/pending/jumplist.csv")
