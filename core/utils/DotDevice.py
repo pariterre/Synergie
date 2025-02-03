@@ -64,7 +64,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         self._usb_manager.addXsDotCallbackHandler(self)
         self._is_battery_charging = False
         self._is_plugged = False
-        self._initialize_usb()
+        self.open_usb(should_stop_recording=False)
 
         self._port_info_bluetooth = port_info_bluetooth
         self._bluetooth_manager = movelladot_sdk.XsDotConnectionManager()
@@ -135,24 +135,6 @@ class DotDevice(movelladot_sdk.XsDotCallback):
     @property
     def recording_count(self) -> int:
         return self._recording_count
-
-    def _initialize_usb(self):
-        """
-        Initialize the USB connection
-        """
-
-        self._usb_manager.closePort(self._port_info_usb)
-        while True:
-            self._usb_manager.openPort(self._port_info_usb)
-            device = self._usb_manager.usbDevice(self._port_info_usb.deviceId())
-            if device:
-                break
-            _logger.warning(f"Connection to USB Device {self._port_info_usb.deviceId()} failed")
-
-        self._usb_device = device
-        _logger.info(f"USB connection established with device ID: {self.device_id}")
-        self._is_plugged = True
-        self._is_battery_charging = True  # Assume the device is connected therefore charging
 
     def _load_images(self):
         """
@@ -511,29 +493,41 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         self._is_plugged = False
         _logger.info("USB connexion closed.")
 
-    def open_usb(self):
+    def open_usb(self, should_stop_recording: bool, max_retries: int = 5):
         """
-        Open the USB connexion
+        Initialize the USB connection
         """
 
         if self._is_plugged:
             return
 
-        is_success = self._usb_manager.openPort(self._port_info_usb)
-        if not is_success:
-            _logger.error(f"Connexion to USB Device {self._port_info_usb.deviceId()} failed")
-            raise UsbCommunicationError()
-        
-        device = self._usb_manager.usbDevice(self._port_info_usb.deviceId())
-        if not device:
-            _logger.error(f"Connexion to USB Device {self._port_info_usb.deviceId()} failed")
-            raise UsbCommunicationError()
-        
-        self._usb_device = device
-        _logger.info(f"USB connexion established with device ID: {self.device_id}")
+        for _ in range(max_retries):
+            self._usb_manager.closePort(self._port_info_usb)  # Safety measure
+            
+            is_success = self._usb_manager.openPort(self._port_info_usb)
+            if not is_success:
+                _logger.error(f"Connexion to USB Device {self._port_info_usb.deviceId()} failed, retrying...")
+                time.sleep(1)
+                continue
+                
+            device = self._usb_manager.usbDevice(self._port_info_usb.deviceId())
+            if not device:
+                _logger.warning(f"Connexion to USB Device {self._port_info_usb.deviceId()} failed, retrying...")
+                time.sleep(1)
+                continue
+            break  # If we reach this point, the connection was successful
 
-        if self.is_recording:
+        else:
+            # If we reach this point, the connection failed after max_retries
+            _logger.error(f"Connexion to USB Device {self._port_info_usb.deviceId()} failed")
+            raise UsbCommunicationError()
+
+        self._usb_device = device
+        _logger.info(f"USB connection established with device ID: {self.device_id}")
+        
+        if should_stop_recording and self._bluetooth_device.deviceState() == 4:
             _logger.info("USB device is currently recording. Stopping recording...")
             self.stop_recording()
-
+        
         self._is_plugged = True
+        self._is_battery_charging = True

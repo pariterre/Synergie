@@ -163,7 +163,7 @@ class DotManager:
         # Check for newly plugged devices
         for device in plugged_devices:
             if device not in self._previous_plugged_devices:
-                device.open_usb()
+                device.open_usb(should_stop_recording=True)
                 has_connected.append(device)
 
                 # If device is currently recording or has pending records, stop it.
