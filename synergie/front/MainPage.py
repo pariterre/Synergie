@@ -4,19 +4,18 @@ from typing import List
 import ttkbootstrap as ttkb
 import webbrowser
 
-from core.utils.DotDevice import DotDevice
-from core.database.DatabaseManager import DatabaseManager
-from core.utils.DotManager import DotManager
-from front.DotPage import DotPage
-
-from front.ExtractingPage import ExtractingPage
+from .DotPage import DotPage
+from .ExtractingPage import ExtractingPage
+from ..core.utils.DotDevice import DotDevice
+from ..core.database.DatabaseManager import DatabaseManager
+from ..core.utils.DotManager import DotManager
 
 class MainPage:
-    def __init__(self, dotsConnected : List[DotDevice], dot_manager : DotManager, db_manager : DatabaseManager, root :ttkb.Window = None) -> None:
+    def __init__(self, dotsConnected : list[DotDevice], dot_manager : DotManager, database_manager : DatabaseManager, root :ttkb.Window = None) -> None:
         self.root = root
-        self.dotsConnected = dotsConnected
+        self._dots_connected = dotsConnected
         self.dot_manager = dot_manager
-        self.db_manager = db_manager
+        self.db_manager = database_manager
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
         self.frame = ttkb.Frame(root)
@@ -34,8 +33,17 @@ class MainPage:
         waitingProgress.start(10)
         self.waitingFrame.grid(row=0,column=0)
         self.frame.grid(sticky="nswe")
-        
-    def make_dot_page(self):
+    
+    @property
+    def dots_connected(self):
+        return self._dots_connected
+
+    @dots_connected.setter
+    def dots_connected(self, dots_connected : list[DotDevice]):
+        self._dots_connected = dots_connected
+        self._make_dot_page()
+
+    def _make_dot_page(self):
         self.frame.destroy()
         self.frame = ttkb.Frame(self.root)
         self.frame.grid_rowconfigure(0,weight=1)
@@ -43,7 +51,7 @@ class MainPage:
         self.frame.grid_rowconfigure(2,weight=1)
         self.frame.grid_columnconfigure(0, weight=1)
 
-        self.dotPage = DotPage(self.frame, self.dotsConnected)
+        self.dotPage = DotPage(self.frame, self._dots_connected)
         self.dotPage.grid(row=0,column=0,sticky="nswe")
 
         self.make_export_button()
@@ -72,7 +80,7 @@ class MainPage:
         self.exportFrame.grid(row=1,column=0)
 
     def export_all_dots(self):
-        for device in self.dotsConnected:
+        for device in self._dots_connected:
             if (not device._is_recording) and device.is_plugged and device.recording_count > 0:
                 extractEvent = threading.Event()
                 threading.Thread(target=device.export_data, args=([self._save_data_to_file, extractEvent]),daemon=True).start()

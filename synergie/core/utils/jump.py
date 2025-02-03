@@ -2,8 +2,7 @@ import numpy as np
 import pandas as pd
 import math
 
-import constants
-from constants import JumpType, jumpSuccess
+from .constants import JumpType, jumpSuccess
 
 
 class Jump:

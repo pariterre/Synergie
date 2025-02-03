@@ -1,6 +1,6 @@
 from tkinter.font import BOLD, Font
 import ttkbootstrap as ttkb
-from core.database.DatabaseManager import DatabaseManager
+from ..core.database.DatabaseManager import DatabaseManager
 
 class ConnectionPage:
     """
@@ -8,10 +8,10 @@ class ConnectionPage:
     to connect. This page checks if the user is a coach and, if so, allows them to access the rest
     of the application.
     """
-    def __init__(self, root : ttkb.Window, dbManager : DatabaseManager) -> None:
+    def __init__(self, root : ttkb.Window, database_manager : DatabaseManager) -> None:
         self.root = root
-        self.dbManager = dbManager
-        self.userConnected = ""
+        self._database_manager = database_manager
+        self._user_id: str = None
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
         self.frame = ttkb.Frame(self.root)
@@ -35,17 +35,21 @@ class ConnectionPage:
         self.errorLabel.grid(row=3, column=0)
         self.frame.grid(sticky="nswe")
     
+    @property
+    def user_id(self):
+        return self._user_id
+
     def register(self):
         """
         Attempt to find and authenticate the user by their email.
         Checks internet connectivity before proceeding.
         """
-        userFound = self.dbManager.findUserByEmail(self.accountVar.get())
+        userFound = self._database_manager.findUserByEmail(self.accountVar.get())
         if userFound != []:
             x = userFound[0]
             if x.get("role") == "COACH":
                 print("Connecté")
-                self.userConnected = x.id
+                self._user_id = x.id
             else:
                 self.errorVar.set("Erreur : vous avez besoin d'un compte entraîneur")
         else:

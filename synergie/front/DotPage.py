@@ -2,8 +2,8 @@ from math import ceil
 import ttkbootstrap as ttkb
 from typing import List
 
-from core.utils.DotDevice import DotDevice
-from front.DotFrame import DotFrame
+from .DotFrame import DotFrame
+from ..core.utils.DotDevice import DotDevice
 
 class DotPage(ttkb.Frame):
     def __init__(self, parent, dotsconnected : List[DotDevice], **kwargs) -> None:

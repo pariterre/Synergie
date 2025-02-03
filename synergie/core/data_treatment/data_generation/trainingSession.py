@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 
-import constants
-from core.utils import plot
-from core.utils.jump import Jump
+from ...utils import constants
+from ...utils import plot
+from ...utils.jump import Jump
 
 
 def gather_jumps(df: pd.DataFrame) -> list[Jump]:

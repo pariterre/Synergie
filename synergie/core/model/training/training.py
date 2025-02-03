@@ -3,8 +3,8 @@ import numpy as np
 import tensorflow as tf
 from sklearn.metrics import confusion_matrix
 
-import core.model.model
-import core.model.training.loader as loader
+from .. import model
+from . import loader
 
 
 class Trainer:
@@ -66,7 +66,7 @@ class Trainer:
             self.plot(self.model_filepath)
 
         if plot:
-            self.model = core.model.model.load_model(self.model_filepath)
+            self.model = model.load_model(self.model_filepath)
             self.plot(self.model_filepath)
 
     def train_success(self, epochs: int = 100, plot: bool = True):
@@ -91,5 +91,5 @@ class Trainer:
             self.plot(self.model_filepath)
 
         if plot:
-            self.model = core.model.model.load_model(self.model_filepath)
+            self.model = model.load_model(self.model_filepath)
             self.plot(self.model_filepath)

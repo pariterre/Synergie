@@ -9,7 +9,7 @@
             "name": "Python Debugger",
             "type": "debugpy",
             "request": "launch",
-            "program": "app.py",
+            "program": "main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
         }

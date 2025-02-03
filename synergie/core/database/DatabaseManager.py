@@ -8,8 +8,8 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 import firebase_admin.firestore
 
-from core.utils.connexion import has_internet_connection
-from core.utils.errors import InternetConnectionError, InvalidCertificateError, NoDataFoundForId
+from ..utils.connexion import has_internet_connection
+from ..utils.errors import InternetConnectionError, InvalidCertificateError, NoDataFoundForId
 
 _logger = logging.getLogger(__name__)
 

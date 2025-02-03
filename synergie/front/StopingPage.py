@@ -1,26 +1,23 @@
-import os
 import threading
 import time
-import sys
 
 from PIL import Image, ImageTk
 from tkinter.font import BOLD, Font
 import ttkbootstrap as ttkb
 
-from core.database.DatabaseManager import DatabaseManager
-from core.utils.DotDevice import DotDevice
+from .img import logo_s2mjump_rgb_png_path
+from ..core.database.DatabaseManager import DatabaseManager
+from ..core.utils.DotDevice import DotDevice
 
 class StopingPage:
     def __init__(self, device : DotDevice, db_manager : DatabaseManager) -> None:
-        base_folder = os.path.dirname(__file__)
-
         self._device = device
         self._database_manager = db_manager
         self._device_tag = self._device.device_tag_name
         self._window = ttkb.Toplevel(title="Confirmation", size=(1000,400), topmost=True)
         self._window.place_window_center()
         
-        ico = Image.open(f"{base_folder}/../resources/img/Logo_s2mjump_rgb.png")
+        ico = Image.open(logo_s2mjump_rgb_png_path)
         photo = ImageTk.PhotoImage(ico)
         self._window.wm_iconphoto(False, photo)
         self._window.grid_rowconfigure(0, weight = 1)

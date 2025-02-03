@@ -1,15 +1,17 @@
 import logging
 import os
+import threading
+import time
 from typing import Callable
 
-import numpy as np
-from core.utils.DotDevice import DotDevice
-from core.database.DatabaseManager import DatabaseManager
-from core.utils.xdpchandler import XdpcHandler
 import asyncio
+import numpy as np
 if os.name == 'nt':
     from winsdk.windows.devices import radios
 
+from ..database.DatabaseManager import DatabaseManager
+from .DotDevice import DotDevice
+from .xdpchandler import XdpcHandler
 from .DotDevice import initialize_bluetooth_dot_device
 from .errors import BluetoothCommunicationError, MissingSensorsError
 from .movella_loader import movelladot_sdk
@@ -127,40 +129,68 @@ class DotManager:
             raise MissingSensorsError(sensor_names=unconnected_devices)
 
         self._previous_plugged_devices = self._devices
+
         return
     
-    def check_plug_statuses(
+    def start_usb_monitoring(self, start_recording_callback, stop_recording_callback):
+        """
+        Start monitoring USB devices.
+        
+        Args:
+            start_recording_callback (function): Function to call when a non-recording device disconnects.
+            stop_recording_callback (function): Function to call when a recording device reconnects.
+        """
+        usb_detection_thread = threading.Thread(
+            target=self._monitor_usb_dots,
+            args=([start_recording_callback, stop_recording_callback]),
+            daemon=True,
+        )
+        usb_detection_thread.start()
+
+    def _monitor_usb_dots(self, start_recording_callback, stop_recording_callback):
+        """
+        Continuously monitor device connection status. If a device is connected
+        while recording, stop it and notify the user. If a device is disconnected while
+        not recording, start it.
+        
+        Args:
+            start_recording_callback (function): Function to call when a non-recording device disconnects.
+            stop_recording_callback (function): Function to call when a recording device reconnects.
+        """
+
+        while True:
+            # Check the status of devices.
+            self._check_plug_statuses(start_recording_callback=start_recording_callback, stop_recording_callback=stop_recording_callback)
+
+            # Wait a short time before checking again.
+            time.sleep(0.2)
+
+    def _check_plug_statuses(
             self, 
             start_recording_callback: Callable[[DotDevice], None],
             stop_recording_callback: Callable[[DotDevice], None]
-        ) -> tuple[list[DotDevice], list[DotDevice]]:
+        ):
         """
         Detects USB-connected sensors to capture any new connections or disconnections.
 
         Args:
             start_recording_callback (Callable): Function to call when a non-recording device disconnects.
             stop_recording_callback (Callable): Function to call when a recording device reconnects.
-
-        Returns:
-            Tuple[List[DotDevice], List[DotDevice]]: Lists of last connected and last disconnected devices.
         """
         
         plugged_devices = [device for device in self._devices if device.is_battery_charging]
 
-        has_connected = []
-        has_disconnected = []
-        
         # Check for newly unplugged devices
         for device in self._previous_plugged_devices:
             if device not in plugged_devices:
                 device.close_usb()
-                has_disconnected.append(device)
                 
                 # If device is not currently recording, start it.
                 if not device.is_recording:
                     start_recording_callback(device)
 
         # Check for newly plugged devices
+        has_connected = []
         for device in plugged_devices:
             if device not in self._previous_plugged_devices:
                 device.open_usb(should_stop_recording=True)
@@ -171,7 +201,6 @@ class DotManager:
                     stop_recording_callback(device)
        
         self._previous_plugged_devices = plugged_devices
-        return has_connected, has_disconnected
 
     def get_export_estimated_time(self) -> float:
         """

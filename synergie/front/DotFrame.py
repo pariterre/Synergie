@@ -2,7 +2,7 @@ from datetime import datetime
 from tkinter.font import BOLD, Font
 import ttkbootstrap as ttkb
 
-from core.utils.DotDevice import DotDevice
+from ..core.utils.DotDevice import DotDevice
 
 class DotFrame(ttkb.Frame):
     def __init__(self, parent, device : DotDevice, **kwargs) -> None:

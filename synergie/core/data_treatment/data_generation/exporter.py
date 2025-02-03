@@ -3,9 +3,9 @@ import os
 from typing import List
 import pandas as pd
 
-import constants
-from core.database.DatabaseManager import DatabaseManager, JumpData
-from core.utils.jump import Jump
+from ...database.DatabaseManager import DatabaseManager
+from ...utils import constants
+from ...utils.jump import Jump
 
 
 def mstostr(ms: float):
@@ -15,9 +15,9 @@ def mstostr(ms: float):
 
 
 def export(df: pd.DataFrame, sampleTimeFineSynchro: int = 0) -> pd.DataFrame:
-    from core.data_treatment.data_generation.modelPredictor import ModelPredictor
-    from core.data_treatment.data_generation.trainingSession import trainingSession
-    from core.model import model
+    from .modelPredictor import ModelPredictor
+    from .trainingSession import trainingSession
+    from ...model import model
     """
     exports the data to a folder, in order to be used by the ML model
     :param folder_name: the folder where to export the data
@@ -59,7 +59,7 @@ def export(df: pd.DataFrame, sampleTimeFineSynchro: int = 0) -> pd.DataFrame:
 
 
 def old_export():
-    from core.data_treatment.data_generation.trainingSession import trainingSession
+    from .trainingSession import trainingSession
     """
     exports the data to a folder, in order to be used by the ML model
     :param folder_name: the folder where to export the data

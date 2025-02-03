@@ -1,6 +1,5 @@
 import os
 import keras
-import constants
 
 import numpy as np
 import pandas as pd

@@ -9,10 +9,11 @@ import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
-import constants
-from core.database.DatabaseManager import DatabaseManager, JumpData
+from . import constants
 from .errors import UsbCommunicationError, DeviceNotFoundError
 from .movella_loader import movelladot_sdk
+from ..database.DatabaseManager import DatabaseManager, JumpData
+from ...front.img import dot_active_path, dot_inactive_path
 
 _logger = logging.getLogger(__name__)
 
@@ -64,7 +65,6 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         self._usb_manager.addXsDotCallbackHandler(self)
         self._is_battery_charging = False
         self._is_plugged = False
-        self.open_usb(should_stop_recording=False)
 
         self._port_info_bluetooth = port_info_bluetooth
         self._bluetooth_manager = movelladot_sdk.XsDotConnectionManager()
@@ -74,6 +74,10 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         self._bluetooth_device = initialize_bluetooth_dot_device(
             bluetooth_manager=self._bluetooth_manager, port_info_bluetooth=self._port_info_bluetooth
         )
+        
+        self._load_images()
+        self.open_usb(should_stop_recording=False)
+        self.stop_recording()  # Make sure the device is not recording
 
         self._is_recording = self._usb_device.recordingCount() == -1
         if self._is_recording:
@@ -82,8 +86,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             self._recording_count = self._usb_device.recordingCount()
         self._timing_record = datetime.now().timestamp()
 
-        self._load_images()
-        self._current_image = self._image_active
+        self._current_image = self._image_inactive
 
         self._save_data_to_file = False
         self._count = 0
@@ -141,20 +144,19 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         Load the images for the active and inactive states of the sensor.
         """
         # TODO : This can be changed to relative with a proper packaging
-        base_folder = os.path.dirname(__file__)  
         font_tag = ImageFont.truetype(font="arialbd.ttf", size=60)
 
         text = self.device_tag_name
         text_offset_x = 93 if len(text) == 1 else 75
 
-        img_active = Image.open(f"{base_folder}/../../resources/img/dot_active.png")
+        img_active = Image.open(dot_active_path)
         d = ImageDraw.Draw(img_active)
         d.text((text_offset_x, 65), text, font=font_tag, fill="black")
         img_active = img_active.resize((116, 139))
         self._image_active = ImageTk.PhotoImage(img_active)
 
         # Load inactive image
-        img_inactive = Image.open(f"{base_folder}/../../resources/img/dot_inactive.png")
+        img_inactive = Image.open(dot_inactive_path)
         d = ImageDraw.Draw(img_inactive)
         d.text((text_offset_x, 65), text, font=font_tag, fill="black")
         img_inactive = img_inactive.resize((116, 139))
@@ -323,10 +325,10 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         _logger.info("You can disconnect the dot.")
         self._recording_count = 0
         extract_event.set()
-        self._current_image = self._image_active
+        self._current_image = self._image_inactive
 
     def predict_training(self, training_id: str, df: pd.DataFrame):
-        from core.data_treatment.data_generation.exporter import export
+        from ..data_treatment.data_generation.exporter import export
 
         """
         Predict the training data and update the database
@@ -490,7 +492,11 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             return
 
         self._usb_manager.closePort(self._port_info_usb)
+        
         self._is_plugged = False
+        self._is_battery_charging = False
+        self._current_image = self._image_active
+        
         _logger.info("USB connexion closed.")
 
     def open_usb(self, should_stop_recording: bool, max_retries: int = 5):
@@ -531,3 +537,4 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         
         self._is_plugged = True
         self._is_battery_charging = True
+        self._current_image = self._image_active

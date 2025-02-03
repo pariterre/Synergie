@@ -7,7 +7,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from dataclasses import dataclass
 
-import constants
+from ...utils import constants
+
 
 @dataclass
 class Dataset:
