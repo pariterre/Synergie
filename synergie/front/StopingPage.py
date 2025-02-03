@@ -29,22 +29,22 @@ class StopingPage:
         self._frame.grid_columnconfigure(0, weight = 1)
         label = ttkb.Label(self._frame, text=f"Arrêtez l'enregistrement du capteur {self._device_tag}", font=Font(self._window, size=20, weight=BOLD))
         label.grid(row=0,column=0,pady=20)
-        buttonStyle = ttkb.Style()
-        buttonStyle.configure("my.TButton", font=Font(self._frame, size=12, weight=BOLD))
-        ttkb.Button(self._frame, text="Arrêt", style="my.TButton", command=self.stopRecord).grid(row=1,column=0,sticky="nsew",pady=20)
-        self.estimatedTime = self._device.get_export_estimated_time()
-        ttkb.Button(self._frame, text=f"Arrêt et extraction des données \n Temps estimé : {round(self.estimatedTime,0)} min", style="my.TButton", command=self.stopRecordAndExtract).grid(row=2,column=0,sticky="nsew")
+        button_style = ttkb.Style()
+        button_style.configure("my.TButton", font=Font(self._frame, size=12, weight=BOLD))
+        ttkb.Button(self._frame, text="Arrêt", style="my.TButton", command=self._stop_record).grid(row=1,column=0,sticky="nsew",pady=20)
+        self._estimated_time = self._device.get_export_estimated_time()
+        ttkb.Button(self._frame, text=f"Arrêt et extraction des données \n Temps estimé : {round(self._estimated_time,0)} min", style="my.TButton", command=self._stop_record_and_extract).grid(row=2,column=0,sticky="nsew")
         self._save_data_to_file = ttkb.Checkbutton(self._frame, text="Sauvegarder plus de données (pour la recherche)")
         self._save_data_to_file.state(["!alternate"])
         self._save_data_to_file.grid(row=3,column=0,sticky="nsew")
         self._frame.grid(sticky ="nswe")
         self._window.grid()
 
-    def stopRecord(self):
-        recordStopped = self._device.stop_recording()
+    def _stop_record(self):
+        record_stopped = self._device.stop_recording()
         self._frame.destroy()
         self._frame = ttkb.Frame(self._window)
-        if recordStopped :
+        if record_stopped :
             message = f"Enregistrement stoppé sur le capteur {self._device_tag}"
         else : 
             message = "Erreur durant l'arrêt, impossible d'arrêter l'enregistrement"
@@ -55,53 +55,54 @@ class StopingPage:
         time.sleep(1)
         self._window.destroy()
     
-    def stopRecordAndExtract(self):
-        recordStopped = self._device.stop_recording()
+    def _stop_record_and_extract(self):
+        record_stopped = self._device.stop_recording()
         _save_data_to_file = self._save_data_to_file.instate(["selected"])
         self._frame.destroy()
         self._frame = ttkb.Frame(self._window)
         self._frame.grid_columnconfigure(0, weight=1)
         self._frame.grid_rowconfigure(0, weight=1)
         self._frame.grid_rowconfigure(1, weight=1)
-        if recordStopped :
+        if record_stopped :
             message = f"Enregistrement stoppé sur le capteur {self._device_tag}"
         else : 
             message = "Erreur durant l'arrêt, impossible d'arrêter l'enregistrement"
-        self.text = ttkb.StringVar(self._frame, value = message)
-        self.label = ttkb.Label(self._frame, textvariable=self.text, font=Font(self._window, size=20, weight=BOLD))
-        self.label.grid(row=0,column=0, pady=50)
+        self._text = ttkb.StringVar(self._frame, value = message)
+        self._label = ttkb.Label(self._frame, textvariable=self._text, font=Font(self._window, size=20, weight=BOLD))
+        self._label.grid(row=0,column=0, pady=50)
         self._frame.grid()
         self._window.update()
         time.sleep(1)
-        self.text.set(f"Extraction des données du capteur {self._device_tag} \nNe pas deconnecter ce capteur")
-        self.label.update()
-        self.max_val = 60*self.estimatedTime
-        self.progressExtract = ttkb.Progressbar(self._frame, value=0, maximum=self.max_val, style="success.Striped.Horizontal.TProgressbar", mode="determinate")
-        self.progressExtract.start(1000)
-        self.progressExtract.grid(row=1, column=0, sticky="we")
+
+        self._text.set(f"Extraction des données du capteur {self._device_tag} \nNe pas deconnecter ce capteur")
+        self._label.update()
+        self._max_value = 60*self._estimated_time
+        self._progress_extract = ttkb.Progressbar(self._frame, value=0, maximum=self._max_value, style="success.Striped.Horizontal.TProgressbar", mode="determinate")
+        self._progress_extract.start(1000)
+        self._progress_extract.grid(row=1, column=0, sticky="we")
         self._frame.grid()
         self._window.update()
-        self.extractEvent = threading.Event()
-        self.checkFinish()
-        if recordStopped :
-            threading.Thread(target=self._device.export_data, args=([_save_data_to_file, self.extractEvent]),daemon=True).start()
+        self._extract_event = threading.Event()
+        self._check_finish()
+        if record_stopped:
+            threading.Thread(target=self._device.export_data, args=([_save_data_to_file, self._extract_event]),daemon=True).start()
         else:
-            self.extractEvent.set()
+            self._extract_event.set()
 
-    def checkFinish(self):
+    def _check_finish(self):
         try:
-            self.checkProgressBar()
+            self._check_progress_bar()
         except:
             pass
         self._window.update()
-        if self.extractEvent.is_set():
-            self.text.set("Extraction finie")
-            self.label.update()
+        if self._extract_event.is_set():
+            self._text.set("Extraction finie")
+            self._label.update()
             time.sleep(1)
             self._window.destroy()
-        self._window.after(1000, self.checkFinish)
+        self._window.after(1000, self._check_finish)
     
-    def checkProgressBar(self):
-        if self.progressExtract["value"] >= self.max_val-1: 
-            self.progressExtract.stop()
-            self.progressExtract["value"] = self.max_val
+    def _check_progress_bar(self):
+        if self._progress_extract["value"] >= self._max_value-1: 
+            self._progress_extract.stop()
+            self._progress_extract["value"] = self._max_value

@@ -94,5 +94,5 @@ class trainingSession:
         self.jumps = gather_jumps(df)
 
     def plot(self):
-        timestamps = [i.startTimestamp for i in self.jumps] + [i.endTimestamp for i in self.jumps]
+        timestamps = [jump.start_timestamp for jump in self.jumps] + [jump.end_timestamp for jump in self.jumps]
         plot.plot_data(self.df, timestamps, str(self))

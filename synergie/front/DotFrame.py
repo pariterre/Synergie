@@ -8,49 +8,40 @@ class DotFrame(ttkb.Frame):
     def __init__(self, parent, device : DotDevice, **kwargs) -> None:
         super().__init__(parent, **kwargs)
         self.parent = parent
-        self.device = device
+        self._device = device
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
         self.grid_rowconfigure(2, weight=1)
         self.grid_rowconfigure(3, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        self.imageLabel = ttkb.Label(self, image=self.device.current_image)
-        self.imageLabel.grid(row=0, column=0)
-        labelFont = Font(self, size=15, weight=BOLD)
-        self.pluggedLabel = ttkb.Label(self, text=f"En charge : {self.device.is_plugged}", font=labelFont)
-        self.pluggedLabel.grid(row=1, column=0, sticky="w")
-        self.batteryLabel = ttkb.Label(self, text=f"Batterie : {self.device.battery_level}%", font=labelFont)
-        self.batteryLabel.grid(row=2, column=0, sticky="w")
-        if self.device._is_recording: 
-            recording = "en cours" 
-        else: 
-            recording = self.device.recording_count
-        self.recordsLabel = ttkb.Label(self, text=f"Enregistrements stockés: {recording}", font=labelFont)
-        self.recordsLabel.grid(row=3, column=0, sticky="w")
-        if self.device._is_recording:
-            duration = datetime.now().timestamp() - self.device.timing_record
-            displayTime = '{:02d}:{:02d}'.format(int(duration//60), int(duration%60))
-            recordMessage = f"Enregistrement en cours ...\n    {displayTime}"
-        else:
-            recordMessage = "Pas d'enregistrement en cours"
-        self.recordingLabel = ttkb.Label(self, text=recordMessage, font=labelFont)
-        self.recordingLabel.grid(row=4, column=0, sticky="w")
+        self._image_label = ttkb.Label(self, image=self._device.current_image)
+        self._image_label.grid(row=0, column=0)
+        label_font = Font(self, size=15, weight=BOLD)
+        self._plugged_label = ttkb.Label(self, text=f"En charge : {self._device.is_plugged}", font=label_font)
+        self._plugged_label.grid(row=1, column=0, sticky="w")
+        self._battery_label = ttkb.Label(self, text=f"Batterie : {self._device.battery_level}%", font=label_font)
+        self._battery_label.grid(row=2, column=0, sticky="w")
+        self._recording_label = ttkb.Label(self, text="", font=label_font)
+        self._recording_label.grid(row=4, column=0, sticky="w")
+        self._records_label = ttkb.Label(self, text="", font=label_font)
+        self._records_label.grid(row=3, column=0, sticky="w")
+        self.update_dot()
         self.grid(row=0, column=0)
     
-    def updateDot(self):
-        self.imageLabel.configure({"image" : self.device.current_image})
-        self.pluggedLabel.configure({"text" : f"En charge : {self.device.is_plugged}"})
-        self.batteryLabel.configure({"text" : f"Batterie : {self.device.battery_level}%"})
-        if self.device._is_recording:
+    def update_dot(self):
+        self._image_label.configure({"image" : self._device.current_image})
+        self._plugged_label.configure({"text" : f"En charge : {self._device.is_plugged}"})
+        self._battery_label.configure({"text" : f"Batterie : {self._device.battery_level}%"})
+        if self._device._is_recording:
             recording = "en cours" 
         else: 
-            recording = self.device.recording_count
-        self.recordsLabel.configure({"text" : f"Enregistrements stockés : {recording}"})
-        if self.device._is_recording:
-            duration = datetime.now().timestamp() - self.device.timing_record
-            displayTime = '{:02d}:{:02d}'.format(int(duration//60), int(duration%60))
-            recordMessage = f"Enregistrement en cours ...\n    {displayTime}"
+            recording = self._device.recording_count
+        self._records_label.configure({"text" : f"Enregistrements stockés : {recording}"})
+        if self._device._is_recording:
+            duration = datetime.now().timestamp() - self._device.timing_record
+            display_time = '{:02d}:{:02d}'.format(int(duration//60), int(duration%60))
+            record_message = f"Enregistrement en cours ...\n    {display_time}"
         else:
-            recordMessage = "Pas d'enregistrement en cours"
-        self.recordingLabel.configure({"text" : recordMessage})
+            record_message = "Pas d'enregistrement en cours"
+        self._recording_label.configure({"text" : record_message})

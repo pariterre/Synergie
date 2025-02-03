@@ -23,4 +23,4 @@ class DotPage(ttkb.Frame):
     
     def updatePage(self):
         for dotFrame in self.dotsFrames:
-            dotFrame.updateDot()
+            dotFrame.update_dot()

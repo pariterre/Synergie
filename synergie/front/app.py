@@ -98,7 +98,7 @@ class App:
             return
         
         # User is connected, store the user id and move to the main page.
-        self._connexion_page.frame.destroy()
+        self._connexion_page.destroy()
         self._root_window.update()
         self._show_launch_main_page()
 

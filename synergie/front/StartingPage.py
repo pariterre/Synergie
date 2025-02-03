@@ -21,22 +21,22 @@ class StartingPage:
     training data for that skater on the specified device.
     """
 
-    def __init__(self, device: DotDevice, db_manager: DatabaseManager, userConnected: str) -> None:
+    def __init__(self, device: DotDevice, database_manager: DatabaseManager, user_id: str) -> None:
         """
         Initialize the StartingPage window.
 
         Args:
             device (DotDevice): The device instance for which the recording will be initiated.
-            db_manager (DatabaseManager): The database manager instance for retrieving skaters
+            database_manager (DatabaseManager): The database manager instance for retrieving skaters
                                           and handling training data operations.
-            userConnected (str): The username or identifier of the connected coach.
+            user_id (str): The username or identifier of the connected coach.
 
         The constructor sets up the Toplevel window, applies a logo icon (if available),
         and creates a scrollable interface listing all skaters. Each skater is represented
         by a button which, when clicked, triggers the start of a recording.
         """
         self._device = device
-        self._database_manager = db_manager
+        self._database_manager = database_manager
         self._device_tag = self._device.device_tag_name
 
         self._window = ttkb.Toplevel(title="Confirmation", size=(1400,400), topmost=True)
@@ -66,9 +66,9 @@ class StartingPage:
         self._frame.grid_columnconfigure(3, weight = 1)
         self._frame.grid_columnconfigure(4, weight = 1)
 
-        skaters = self._database_manager.getAllSkaterFromCoach(userConnected)
-        buttonStyle = ttkb.Style()
-        buttonStyle.configure("my.TButton", font=Font(self._frame, size=12, weight=BOLD))
+        skaters = self._database_manager.getAllSkaterFromCoach(user_id)
+        button_style = ttkb.Style()
+        button_style.configure("my.TButton", font=Font(self._frame, size=12, weight=BOLD))
         for i,skater in enumerate(skaters):
             button = ttkb.Button(
                 self._frame, 
@@ -97,7 +97,7 @@ class StartingPage:
 
         self._window.grid()
 
-    def _start_record(self, skaterId: str, skaterName: str):
+    def _start_record(self, skater_id: str, skater_name: str):
         """
         Start the recording process for a selected skater on the given device.
 
@@ -108,18 +108,18 @@ class StartingPage:
         - Closes the confirmation window after a brief pause.
 
         Args:
-            skaterId (str): The unique identifier of the selected skater.
-            skaterName (str): The name of the selected skater.
+            skater_id (str): The unique identifier of the selected skater.
+            skater_name (str): The name of the selected skater.
         """
-        deviceId = self._device.device_id
-        new_training = TrainingData(0, skaterId, 0, deviceId, [])
-        self._database_manager.set_current_record(deviceId, self._database_manager.save_training_data(new_training))
-        recordStarted = self._device.start_recording()
+        device_id = self._device.device_id
+        new_training = TrainingData(0, skater_id, 0, device_id, [])
+        self._database_manager.set_current_record(device_id, self._database_manager.save_training_data(new_training))
+        record_started = self._device.start_recording()
         self._canvas.destroy()
         self._label.destroy()
         self._frame = ttkb.Frame(self._window)
-        if recordStarted :
-            message = f"Enregistrement commencé sur le capteur {self._device_tag} pour {skaterName}"
+        if record_started :
+            message = f"Enregistrement commencé sur le capteur {self._device_tag} pour {skater_name}"
         else : 
             message = "Erreur durant le lancement, impossible de lancer l'enregistrement"
         label = ttkb.Label(self._frame, text=message, font=Font(self._window, size=20, weight=BOLD))
