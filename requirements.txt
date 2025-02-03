@@ -1,4 +1,5 @@
 keras==2.14.0
+tf_keras
 matplotlib==3.8.0
 numpy==1.26.0
 pandas==2.1.1

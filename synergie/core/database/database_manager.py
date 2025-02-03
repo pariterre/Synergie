@@ -9,7 +9,11 @@ from firebase_admin import firestore
 import firebase_admin.firestore
 
 from ..utils.connexion import has_internet_connection
-from ..utils.errors import InternetConnectionError, InvalidCertificateError, NoDataFoundForId
+from ..utils.errors import (
+    InternetConnectionError,
+    InvalidCertificateError,
+    NoDataFoundForIdError,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -28,6 +32,7 @@ class JumpData:
         jump_max_speed (float): The maximum speed reached during the jump.
         jump_length (float): The horizontal distance covered during the jump.
     """
+
     jump_id: int
     jump_type: str
     jump_rotations: float
@@ -49,7 +54,7 @@ class JumpData:
             "jump_success": self.jump_success,
             "jump_time": self.jump_time,
             "jump_max_speed": self.jump_max_speed,
-            "jump_length": self.jump_length
+            "jump_length": self.jump_length,
         }
 
 
@@ -65,6 +70,7 @@ class TrainingData:
         dot_id (str): The identifier of the dot/device used during training.
         training_jumps (List[str]): A list of jump document references or jump IDs associated with this training.
     """
+
     training_id: int
     skater_id: int
     training_date: datetime
@@ -82,7 +88,7 @@ class TrainingData:
             "skater_id": self.skater_id,
             "training_date": self.training_date,
             "dot_id": self.dot_id,
-            "training_jumps": self.training_jumps
+            "training_jumps": self.training_jumps,
         }
 
 
@@ -95,6 +101,7 @@ class SkaterData:
         skater_id (int): Unique identifier for the skater.
         skater_name (str): The name of the skater.
     """
+
     skater_id: int
     skater_name: str
 
@@ -139,7 +146,7 @@ class DatabaseManager:
             raise InternetConnectionError()
 
         # Attempt to load the Firebase credentials from the PyInstaller bundle; if not present, load locally.
-        try: 
+        try:
             cred = credentials.Certificate(certificate_path)
         except:
             raise InvalidCertificateError()
@@ -152,7 +159,6 @@ class DatabaseManager:
 
         # Create a Firestore client instance.
         self.db = firestore.client()
-
 
     def save_training_data(self, data: TrainingData) -> int:
         """
@@ -223,33 +229,35 @@ class DatabaseManager:
             device_id (str): The device (dot) ID.
             current_record (str): The record ID to add.
         """
-        self.db.collection("dots").document(device_id).update({"current_record": firestore.ArrayUnion([current_record])})
+        self.db.collection("dots").document(device_id).update(
+            {"current_record": firestore.ArrayUnion([current_record])}
+        )
 
-    def get_current_record(self, deviceId: str) -> str:
+    def get_current_record(self, device_id: str) -> str:
         """
         Get the latest 'current_record' from a device's document.
 
         Args:
-            deviceId (str): The ID of the device.
+            device_id (str): The ID of the device.
 
         Returns:
             str: The most recently added record ID, or an empty string if none found.
         """
         try:
-            trainingId = self.db.collection("dots").document(deviceId).get().get("current_record")[-1]
-            return trainingId
+            training_id = self.db.collection("dots").document(device_id).get().get("current_record")[-1]
+            return training_id
         except:
             return ""
 
-    def remove_current_record(self, deviceId: str, trainingId: str) -> None:
+    def remove_current_record(self, device_id: str, training_id: str) -> None:
         """
         Remove a specific training ID from the 'current_record' array of a given device.
 
         Args:
-            deviceId (str): The ID of the device.
-            trainingId (str): The training ID to remove.
+            device_id (str): The ID of the device.
+            training_id (str): The training ID to remove.
         """
-        self.db.collection("dots").document(deviceId).update({"current_record": firestore.ArrayRemove([trainingId])})
+        self.db.collection("dots").document(device_id).update({"current_record": firestore.ArrayRemove([training_id])})
 
     def get_dot_from_bluetooth(self, bluetoothAddress: str):
         """
@@ -261,39 +269,41 @@ class DatabaseManager:
         Returns:
             DocumentSnapshot or None: The first matched dot document or None if not found.
         """
-        dots = self.db.collection("dots").where(
-            filter=firestore.firestore.FieldFilter("bluetooth_address", "==", bluetoothAddress)
-        ).get()
+        dots = (
+            self.db.collection("dots")
+            .where(filter=firestore.firestore.FieldFilter("bluetooth_address", "==", bluetoothAddress))
+            .get()
+        )
         if len(dots) > 0:
             return dots[0]
         else:
             return None
 
-    def save_dot_data(self, deviceId: str, bluetoothAddress: str, tagName: str) -> None:
+    def save_dot_data(self, device_id: str, bluetooth_address: str, tag_name: str) -> None:
         """
         Save a new dot document with the given details.
 
         Args:
-            deviceId (str): The device's unique ID.
+            device_id (str): The device's unique ID.
             bluetoothAddress (str): The Bluetooth address of the device.
             tagName (str): A tag name (e.g., a human-readable identifier) for the device.
         """
         newDot = {
-            "bluetooth_address": bluetoothAddress,
+            "bluetooth_address": bluetooth_address,
             "current_record": [],
-            "tag_name": tagName
+            "tag_name": tag_name,
         }
-        self.db.collection("dots").add(document_data=newDot, document_id=deviceId)
+        self.db.collection("dots").add(document_data=newDot, document_id=device_id)
 
-    def add_jumps_to_training(self, trainingId: str, trainingJumps: List[str]) -> None:
+    def add_jumps_to_training(self, training_id: str, training_jumps: list[str]) -> None:
         """
         Update a training's jump list with new jumps.
 
         Args:
-            trainingId (str): The ID of the training document to update.
-            trainingJumps (List[str]): A list of jump IDs to associate with the training.
+            training_id (str): The ID of the training document to update.
+            training_jumps (List[str]): A list of jump IDs to associate with the training.
         """
-        self.db.collection("trainings").document(trainingId).update({"training_jumps": trainingJumps})
+        self.db.collection("trainings").document(training_id).update({"training_jumps": training_jumps})
 
     def findUserByEmail(self, email: str):
         """
@@ -305,29 +315,27 @@ class DatabaseManager:
         Returns:
             List[DocumentSnapshot]: A list of user documents matching the email.
         """
-        return self.db.collection("users").where(
-            filter=firestore.firestore.FieldFilter("email", "==", email)
-        ).get()
+        return self.db.collection("users").where(filter=firestore.firestore.FieldFilter("email", "==", email)).get()
 
-    def getAllSkaterFromCoach(self, coachId: str) -> List[SkaterData]:
+    def getAllSkaterFromCoach(self, coach_id: str) -> list[SkaterData]:
         """
         Retrieve all skaters associated with a particular coach user.
 
         Assumes that the coach user's document contains an 'access' field listing skater IDs.
 
         Args:
-            coachId (str): The user ID of the coach.
+            coach_id (str): The user ID of the coach.
 
         Returns:
-            List[SkaterData]: A list of SkaterData objects for each skater accessible by the coach.
+            list[SkaterData]: A list of SkaterData objects for each skater accessible by the coach.
         """
 
         skatersData = []
-        for skater in self.db.collection("users").document(coachId).get().get("access"):
+        for skater in self.db.collection("users").document(coach_id).get().get("access"):
             skatersData.append(
                 SkaterData(
                     skater,
-                    self.db.collection("users").document(skater).get().get("name")
+                    self.db.collection("users").document(skater).get().get("name"),
                 )
             )
         return skatersData
@@ -349,8 +357,9 @@ class DatabaseManager:
                 training.get("skater_id"),
                 training.get("training_date"),
                 training.get("dot_id"),
-                training.get("training_jumps")
-            ) for training in trainings
+                training.get("training_jumps"),
+            )
+            for training in trainings
         ]
 
     def get_jump_by_id(self, jump_id: str) -> JumpData:
@@ -364,7 +373,7 @@ class DatabaseManager:
             JumpData: The JumpData object representing the jump.
 
         Raises:
-            NoDataFoundForId: If no jump document with the given ID exists.
+            NoDataFoundForIdError: If no jump document with the given ID exists.
         """
         jump_doc = self.db.collection("jumps").document(jump_id).get()
 
@@ -378,10 +387,10 @@ class DatabaseManager:
                 jump_success=jump_data["jump_success"],
                 jump_time=jump_data["jump_time"],
                 jump_length=jump_data["jump_length"],
-                jump_max_speed=jump_data["jump_max_speed"]
+                jump_max_speed=jump_data["jump_max_speed"],
             )
         else:
-            raise NoDataFoundForId(data_type="jump", data_id=jump_id)
+            raise NoDataFoundForIdError(data_type="jump", data_id=jump_id)
 
     def get_skater_name_from_training_id(self, training_id: str) -> str:
         """

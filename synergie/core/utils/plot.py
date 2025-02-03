@@ -18,10 +18,10 @@ def plot_data(df: pd.DataFrame, timestamps=[], title: str = "") -> None:
 
     def _sub_plot(ax, args, legend):
         subdf = df[args]
-        subdf.set_index(df['ms'], inplace=True)
+        subdf.set_index(df["ms"], inplace=True)
 
         for i in timestamps:
-            ax.axvline(x=i, color='r', linestyle='-')
+            ax.axvline(x=i, color="r", linestyle="-")
 
         subdf.plot(ax=ax, legend=legend)
 
@@ -33,7 +33,7 @@ def plot_data(df: pd.DataFrame, timestamps=[], title: str = "") -> None:
         (axes[0, 0], ["Euler_X", "Euler_Y", "Euler_Z"], "Euler"),
         (axes[0, 1], ["Acc_X", "Acc_Y", "Acc_Z"], "Acceleration"),
         (axes[1, 0], ["Gyr_X", "Gyr_Y", "Gyr_Z"], "Gyroscope"),
-        (axes[1, 1], ["X_gyr_second_derivative"], "Gyroscope second derivative")
+        (axes[1, 1], ["X_gyr_second_derivative"], "Gyroscope second derivative"),
     ]
 
     # Iterate over the subplots and plot the data

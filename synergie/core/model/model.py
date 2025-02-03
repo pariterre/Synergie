@@ -1,6 +1,7 @@
 import keras
 from keras import layers
 
+
 def lstm():
     """
     Build and compile an LSTM-based neural network model.
@@ -17,34 +18,37 @@ def lstm():
         keras.Model: A compiled Keras model ready for training.
     """
     # Temporal input branch
-    temporal_input = keras.Input(shape=(180, 10), name='temporal_input')
+    temporal_input = keras.Input(shape=(180, 10), name="temporal_input")
     x = layers.BatchNormalization()(temporal_input)
     x = keras.layers.LSTM(128, return_sequences=True)(x)
     x = keras.layers.LSTM(64)(x)
     x = keras.layers.Dropout(0.4)(x)
-    x = keras.layers.Dense(64, activation='relu')(x)
+    x = keras.layers.Dense(64, activation="relu")(x)
     x = keras.layers.Dropout(0.4)(x)
-    x = keras.layers.Dense(16, activation='relu')(x)
+    x = keras.layers.Dense(16, activation="relu")(x)
 
     # Scalar input branch (e.g., mass and height)
-    scalar_input = keras.Input(shape=(2,), name='scalar_input')
-    y = layers.Dense(16, activation='relu')(scalar_input)
+    scalar_input = keras.Input(shape=(2,), name="scalar_input")
+    y = layers.Dense(16, activation="relu")(scalar_input)
 
     # Combine both branches
     combined = layers.concatenate([x, y])
 
     # Final dense layers
     z = layers.Dense(16, activation="relu")(combined)
-    z = keras.layers.Dropout(0.2)(combined)  # Note: This dropout seems to be incorrectly using 'combined' instead of 'z'
-    outputs = keras.layers.Dense(2, activation='softmax')(z)
+    z = keras.layers.Dropout(0.2)(
+        combined
+    )  # Note: This dropout seems to be incorrectly using 'combined' instead of 'z'
+    outputs = keras.layers.Dense(2, activation="softmax")(z)
 
     # Optimizer with a small learning rate
     optimizer = keras.optimizers.Adam(learning_rate=0.00001)
 
     model = keras.Model([temporal_input, scalar_input], outputs)
-    model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+    model.compile(loss="categorical_crossentropy", optimizer=optimizer, metrics=["accuracy"])
 
     return model
+
 
 def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
     """
@@ -76,15 +80,16 @@ def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
     x = layers.Conv1D(filters=inputs.shape[-1], kernel_size=1)(x)
     return x + res  # Residual connection
 
+
 def transformer(
-        input_shape=(240, 10),
-        head_size=256,
-        num_heads=4,
-        ff_dim=4,
-        num_transformer_blocks=4,
-        mlp_units=128,
-        dropout=0,
-        mlp_dropout=0,
+    input_shape=(240, 10),
+    head_size=256,
+    num_heads=4,
+    ff_dim=4,
+    num_transformer_blocks=4,
+    mlp_units=128,
+    dropout=0,
+    mlp_dropout=0,
 ):
     """
     Build and compile a Transformer-based model.
@@ -119,8 +124,8 @@ def transformer(
     x = layers.Dense(16, activation="relu")(x)
 
     # Scalar input branch (e.g., mass and height)
-    scalar_input = keras.Input(shape=(2,), name='scalar_input')
-    y = layers.Dense(16, activation='relu')(scalar_input)
+    scalar_input = keras.Input(shape=(2,), name="scalar_input")
+    y = layers.Dense(16, activation="relu")(scalar_input)
 
     # Combine both branches
     combined = layers.concatenate([x, y])
@@ -137,7 +142,8 @@ def transformer(
     model.compile(loss="categorical_crossentropy", optimizer=optimizer, metrics=["accuracy"])
     return model
 
-def transformerTraining(hp):
+
+def transformer_training(hyper_parameters):
     """
     Build and compile a Transformer model for hyperparameter tuning.
 
@@ -151,10 +157,10 @@ def transformerTraining(hp):
         keras.Model: A compiled Keras model with hyperparameter-defined architecture.
     """
     input_shape = (240, 10)
-    head_size = hp.Int('head_size', min_value=32, max_value=512, step=32)
-    num_heads = hp.Int('num_heads', min_value=2, max_value=16, step=2)
-    ff_dim = hp.Int('ff_dim', min_value=128, max_value=2048, step=128)
-    num_transformer_blocks = hp.Int('num_transformer_blocks', min_value=1, max_value=12, step=1)
+    head_size = hyper_parameters.Int("head_size", min_value=32, max_value=512, step=32)
+    num_heads = hyper_parameters.Int("num_heads", min_value=2, max_value=16, step=2)
+    ff_dim = hyper_parameters.Int("ff_dim", min_value=128, max_value=2048, step=128)
+    num_transformer_blocks = hyper_parameters.Int("num_transformer_blocks", min_value=1, max_value=12, step=1)
     mlp_units = 128
     dropout = 0.3
     mlp_dropout = 0.1
@@ -176,6 +182,7 @@ def transformerTraining(hp):
     model.compile(loss="categorical_crossentropy", optimizer=optimizer, metrics=["accuracy"])
     return model
 
+
 def save_model(model, path="saved_models/model.keras"):
     """
     Save the entire model to the specified path in the Keras format.
@@ -187,6 +194,7 @@ def save_model(model, path="saved_models/model.keras"):
     # Saving the entire model architecture, weights, and optimizer state.
     keras.saving.save_model(model, path, overwrite=True)
 
+
 def load_model(path="saved_models/model.keras"):
     """
     Load a model from the specified path in the Keras format.
@@ -197,4 +205,5 @@ def load_model(path="saved_models/model.keras"):
     Returns:
         keras.Model: The loaded Keras model.
     """
+
     return keras.saving.load_model(path)

@@ -6,15 +6,15 @@ from typing import Callable
 
 import asyncio
 import numpy as np
-if os.name == 'nt':
+
+if os.name == "nt":
     from winsdk.windows.devices import radios
 
-from ..database.DatabaseManager import DatabaseManager
-from .DotDevice import DotDevice
-from .xdpchandler import XdpcHandler
-from .DotDevice import initialize_bluetooth_dot_device
+from .dot_device import DotDevice, initialize_bluetooth_dot_device
 from .errors import BluetoothCommunicationError, MissingSensorsError
 from .movella_loader import movelladot_sdk
+from .xdpchandler import XdpcHandler
+from ..database.database_manager import DatabaseManager
 
 _logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ async def _bluetooth_power(turn_on: bool):
                 else:
                     await this_radio.set_state_async(radios.RadioState.OFF)
                     _logger.info("Bluetooth turned OFF.")
-    
+
     except Exception as e:
         _logger.error(f"Exception in bluetooth_power: {e}")
         raise BluetoothCommunicationError()
@@ -46,14 +46,18 @@ class DotManager:
     """
     Managing the connection to the sensors
     """
-    def __init__(self, database_manager : DatabaseManager) -> None:
-        self._database_manager = database_manager
-        self._devices : list[DotDevice] = []
-        self._previous_plugged_devices : list[DotDevice] = []
 
-    def initialize_connexion(self) -> None:
+    def __init__(self, database_manager: DatabaseManager) -> None:
+        self._database_manager = database_manager
+        self._devices: list[DotDevice] = []
+        self._previous_plugged_devices: list[DotDevice] = []
+
+    def initialize_connexion(self, dots_white_list: list[str]) -> None:
         """
         Initial connection to sensors.
+
+        Args:
+            dots_white_list (list[str]): List of MAC addresses to connect to.
 
         Returns:
             None if successful, otherwise raises an exception.
@@ -67,20 +71,20 @@ class DotManager:
         self._previous_plugged_devices = []
 
         # Disable Bluetooth
-        if os.name == 'nt':
+        if os.name == "nt":
             asyncio.run(_bluetooth_power(False))
-        elif os.name == 'posix':
-            os.system('rfkill block bluetooth')
+        elif os.name == "posix":
+            os.system("rfkill block bluetooth")
         else:
             raise NotImplementedError("Bluetooth power control not implemented for this OS.")
 
         # Initialize USB connection handler
-        xdpc_handler = XdpcHandler()
+        xdpc_handler = XdpcHandler(whitelist=dots_white_list)
         if not xdpc_handler.initialize():
             xdpc_handler.cleanup()
             _logger.error("XdpcHandler initialization failed.")
             raise BluetoothCommunicationError()
-        
+
         # Connect USB devices
         port_info_usb = {}
         xdpc_handler.detect_usb_devices()
@@ -92,14 +96,14 @@ class DotManager:
         _logger.info(f"Connected USB devices: {list(port_info_usb.keys())}")
 
         # Re-enable Bluetooth
-        if os.name == 'nt':
+        if os.name == "nt":
             asyncio.run(_bluetooth_power(True))
-        elif os.name == 'posix':
-            os.system('rfkill unblock bluetooth')
+        elif os.name == "posix":
+            os.system("rfkill unblock bluetooth")
         else:
             raise NotImplementedError("Bluetooth power control not implemented for this OS.")
 
-        xdpc_handler = XdpcHandler()
+        xdpc_handler = XdpcHandler(whitelist=dots_white_list)
         if not xdpc_handler.initialize():
             xdpc_handler.cleanup()
             _logger.error("XdpcHandler initialization failed.")
@@ -112,30 +116,34 @@ class DotManager:
         unconnected_devices = []
         for port_info_bluetooth in port_info_bluetooth:
             device = self._database_manager.get_dot_from_bluetooth(port_info_bluetooth.bluetoothAddress())
-            device_id = initialize_bluetooth_dot_device(movelladot_sdk.XsDotConnectionManager(), port_info_bluetooth) if device is None else device.id
-            
+            device_id = (
+                initialize_bluetooth_dot_device(movelladot_sdk.XsDotConnectionManager(), port_info_bluetooth)
+                if device is None
+                else device.id
+            )
+
             if str(device_id) in port_info_usb:
                 self._devices.append(
                     DotDevice(
-                        port_info_usb=port_info_usb[str(device_id)], 
-                        port_info_bluetooth=port_info_bluetooth, 
-                        database_manager=self._database_manager
-                        )
+                        port_info_usb=port_info_usb[str(device_id)],
+                        port_info_bluetooth=port_info_bluetooth,
+                        database_manager=self._database_manager,
                     )
+                )
             else:
-                unconnected_devices.append(device.get('tag_name'))
-        
+                unconnected_devices.append(device.get("tag_name"))
+
         if unconnected_devices:
             raise MissingSensorsError(sensor_names=unconnected_devices)
 
         self._previous_plugged_devices = self._devices
 
         return
-    
+
     def start_usb_monitoring(self, start_recording_callback, stop_recording_callback):
         """
         Start monitoring USB devices.
-        
+
         Args:
             start_recording_callback (function): Function to call when a non-recording device disconnects.
             stop_recording_callback (function): Function to call when a recording device reconnects.
@@ -152,7 +160,7 @@ class DotManager:
         Continuously monitor device connection status. If a device is connected
         while recording, stop it and notify the user. If a device is disconnected while
         not recording, start it.
-        
+
         Args:
             start_recording_callback (function): Function to call when a non-recording device disconnects.
             stop_recording_callback (function): Function to call when a recording device reconnects.
@@ -160,16 +168,19 @@ class DotManager:
 
         while True:
             # Check the status of devices.
-            self._check_plug_statuses(start_recording_callback=start_recording_callback, stop_recording_callback=stop_recording_callback)
+            self._check_plug_statuses(
+                start_recording_callback=start_recording_callback,
+                stop_recording_callback=stop_recording_callback,
+            )
 
             # Wait a short time before checking again.
             time.sleep(0.2)
 
     def _check_plug_statuses(
-            self, 
-            start_recording_callback: Callable[[DotDevice], None],
-            stop_recording_callback: Callable[[DotDevice], None]
-        ):
+        self,
+        start_recording_callback: Callable[[DotDevice], None],
+        stop_recording_callback: Callable[[DotDevice], None],
+    ):
         """
         Detects USB-connected sensors to capture any new connections or disconnections.
 
@@ -177,14 +188,14 @@ class DotManager:
             start_recording_callback (Callable): Function to call when a non-recording device disconnects.
             stop_recording_callback (Callable): Function to call when a recording device reconnects.
         """
-        
+
         plugged_devices = [device for device in self._devices if device.is_battery_charging]
 
         # Check for newly unplugged devices
         for device in self._previous_plugged_devices:
             if device not in plugged_devices:
                 device.close_usb()
-                
+
                 # If device is not currently recording, start it.
                 if not device.is_recording:
                     start_recording_callback(device)
@@ -199,7 +210,7 @@ class DotManager:
                 # If device is currently recording or has pending records, stop it.
                 if device.is_recording or device.recording_count > 0:
                     stop_recording_callback(device)
-       
+
         self._previous_plugged_devices = plugged_devices
 
     def get_export_estimated_time(self) -> float:

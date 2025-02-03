@@ -1,6 +1,6 @@
 import os
 
-base_folder = os.path.dirname(__file__)  
+base_folder = os.path.dirname(__file__)
 
 
 dot_active_path = f"{base_folder}/dot_active.png"

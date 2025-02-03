@@ -4,7 +4,6 @@ import os
 from threading import Event
 import time
 
-import movelladot_pc_sdk
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageTk
@@ -12,16 +11,16 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 from . import constants
 from .errors import UsbCommunicationError, DeviceNotFoundError
 from .movella_loader import movelladot_sdk
-from ..database.DatabaseManager import DatabaseManager, JumpData
+from ..database.database_manager import DatabaseManager, JumpData
 from ...front.img import dot_active_path, dot_inactive_path
 
 _logger = logging.getLogger(__name__)
 
 
 def initialize_bluetooth_dot_device(
-        bluetooth_manager: movelladot_sdk.XsDotConnectionManager, 
-        port_info_bluetooth: movelladot_sdk.XsPortInfo,
-    ) -> movelladot_sdk.XsDotDevice:
+    bluetooth_manager: movelladot_sdk.XsDotConnectionManager,
+    port_info_bluetooth: movelladot_sdk.XsPortInfo,
+) -> movelladot_sdk.XsDotDevice:
     """
     Initialize the Bluetooth connection
 
@@ -30,7 +29,7 @@ def initialize_bluetooth_dot_device(
     """
     while True:
         _logger.warning(f"Connecting to bluetooth device {port_info_bluetooth.bluetoothAddress()}...")
-        bluetooth_manager.closePort(port_info_bluetooth)    
+        bluetooth_manager.closePort(port_info_bluetooth)
         if bluetooth_manager.openPort(port_info_bluetooth):
             device: movelladot_sdk.XsDotDevice = bluetooth_manager.device(port_info_bluetooth.deviceId())
             if device:
@@ -72,9 +71,10 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             self._bluetooth_manager = movelladot_sdk.XsDotConnectionManager()
         self._bluetooth_manager.addXsDotCallbackHandler(self)
         self._bluetooth_device = initialize_bluetooth_dot_device(
-            bluetooth_manager=self._bluetooth_manager, port_info_bluetooth=self._port_info_bluetooth
+            bluetooth_manager=self._bluetooth_manager,
+            port_info_bluetooth=self._port_info_bluetooth,
         )
-        
+
         self._load_images()
         self.open_usb(should_stop_recording=False)
         self.stop_recording()  # Make sure the device is not recording
@@ -105,10 +105,10 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         # We prioritize the bluetooth device ID as the id seems more consistent (and USB is not always plugged in)
         if self._bluetooth_device:
             return str(self._bluetooth_device.deviceId())
-        
+
         if self._usb_device:
             return str(self._usb_device.deviceId())
-        
+
         raise DeviceNotFoundError(device_id=str(self._usb_device.deviceId()))
 
     @property
@@ -143,7 +143,6 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         """
         Load the images for the active and inactive states of the sensor.
         """
-        # TODO : This can be changed to relative with a proper packaging
         font_tag = ImageFont.truetype(font="arialbd.ttf", size=60)
 
         text = self.device_tag_name
@@ -220,32 +219,28 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         self._export_done = False
         self._packets_received = []
         self._count = 0
-        data = movelladot_pc_sdk.XsIntArray()
+        data = movelladot_sdk.XsIntArray()
         # Define the types of data to export
-        data.push_back(movelladot_pc_sdk.RecordingData_Timestamp)
-        data.push_back(movelladot_pc_sdk.RecordingData_Euler)
-        data.push_back(movelladot_pc_sdk.RecordingData_Acceleration)
-        data.push_back(movelladot_pc_sdk.RecordingData_AngularVelocity)
+        data.push_back(movelladot_sdk.RecordingData_Timestamp)
+        data.push_back(movelladot_sdk.RecordingData_Euler)
+        data.push_back(movelladot_sdk.RecordingData_Acceleration)
+        data.push_back(movelladot_sdk.RecordingData_AngularVelocity)
         if self._save_data_to_file:
-            data.push_back(movelladot_pc_sdk.RecordingData_MagneticField)
-            data.push_back(movelladot_pc_sdk.RecordingData_Quaternion)
-            data.push_back(movelladot_pc_sdk.RecordingData_Status)
+            data.push_back(movelladot_sdk.RecordingData_MagneticField)
+            data.push_back(movelladot_sdk.RecordingData_Quaternion)
+            data.push_back(movelladot_sdk.RecordingData_Status)
 
         # Select the data types for export
         if not self._usb_device.selectExportData(data):
-            _logger.error(
-                f"Could not select export data. Reason: {self._usb_device.lastResultText()}"
-            )
+            _logger.error(f"Could not select export data. Reason: {self._usb_device.lastResultText()}")
             self._export_done = True
             return
 
         # Iterate through each recording and export data
-        for index in range(1, self._usb_device.recordingCount() + 1):
+        for index in range(1, self._usb_device.recordingCount() + 1):  # TODO Why 1?
             rec_info = self._usb_device.getRecordingInfo(index)
             if rec_info.empty():
-                _logger.warning(
-                    f"Could not get recording info. Reason: {self._usb_device.lastResultText()}"
-                )
+                _logger.warning(f"Could not get recording info. Reason: {self._usb_device.lastResultText()}")
                 continue  # Skip to the next recording
 
             record_date = rec_info.startUTC()
@@ -253,22 +248,14 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             if training_id:
                 self._database_manager.set_training_date(training_id, record_date)
                 if not self._usb_device.startExportRecording(index):
-                    _logger.error(
-                        f"Could not export recording. Reason: {self._usb_device.lastResultText()}"
-                    )
+                    _logger.error(f"Could not export recording. Reason: {self._usb_device.lastResultText()}")
                     continue
 
                 while not self._export_done:
                     time.sleep(0.1)
                 _logger.info("File export finished!")
 
-                columnSelected = [
-                    "PacketCounter",
-                    "SampleTimeFine",
-                    "Euler_X",
-                    "Euler_Y",
-                    "Euler_Z",
-                ]
+                columnSelected = ["PacketCounter", "SampleTimeFine", "Euler_X", "Euler_Y", "Euler_Z"]
                 if self._save_data_to_file:
                     columnSelected += [
                         "Quat_W",
@@ -286,23 +273,14 @@ class DotDevice(movelladot_sdk.XsDotCallback):
                         "Mag_Z",
                     ]
                 else:
-                    columnSelected += [
-                        "Acc_X",
-                        "Acc_Y",
-                        "Acc_Z",
-                        "Gyr_X",
-                        "Gyr_Y",
-                        "Gyr_Z",
-                    ]
+                    columnSelected += ["Acc_X", "Acc_Y", "Acc_Z", "Gyr_X", "Gyr_Y", "Gyr_Z"]
 
-                df = pd.DataFrame.from_records(
-                    self._packets_received, columns=columnSelected
-                )
+                df = pd.DataFrame.from_records(self._packets_received, columns=columnSelected)
                 date = datetime.fromtimestamp(record_date).strftime("%Y_%m_%d")
-                start_sample_time = df["SampleTimeFine"].iloc[0]  # TODO Check the iloc
+                start_sample_time = df["SampleTimeFine"].iloc[0]
                 new_sample_time_fine = []
-                for timeFine in df["SampleTimeFine"]:
-                    new_time = timeFine - start_sample_time
+                for time_fine in df["SampleTimeFine"]:
+                    new_time = time_fine - start_sample_time
                     if new_time < 0:
                         new_sample_time_fine.append(new_time + 2**32)
                     else:
@@ -316,8 +294,8 @@ class DotDevice(movelladot_sdk.XsDotCallback):
                 _logger.info(f"Data exported to {csv_path}")
 
                 # Predict training data and update the database
-                self.predict_training(training_id, df)
-                self._database_manager.remove_current_record(self.deviceId, training_id)
+                self._predict_training(training_id, df)
+                self._database_manager.remove_current_record(self.device_id, training_id)
                 self._recording_count -= 1
 
         # Erase sensor's flash memory after exporting
@@ -327,7 +305,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         extract_event.set()
         self._current_image = self._image_inactive
 
-    def predict_training(self, training_id: str, df: pd.DataFrame):
+    def _predict_training(self, training_id: str, df: pd.DataFrame):
         from ..data_treatment.data_generation.exporter import export
 
         """
@@ -340,9 +318,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             unknow_rotation = []
             for _, row in df.iterrows():
                 jump_time_min, jump_time_sec = row["videoTimeStamp"].split(":")
-                jump_time = "{:02d}:{:02d}".format(
-                    int(jump_time_min), int(jump_time_sec)
-                )
+                jump_time = "{:02d}:{:02d}".format(int(jump_time_min), int(jump_time_sec))
                 val_rot = float(row["rotations"])
 
                 if row["type"] < 5 and val_rot > 0.5:
@@ -388,15 +364,11 @@ class DotDevice(movelladot_sdk.XsDotCallback):
                     unknow_rotation.append(jump_data)
 
             if training_jumps:
-                self._database_manager.add_jumps_to_training(
-                    training_id, training_jumps
-                )
+                self._database_manager.add_jumps_to_training(training_id, training_jumps)
             else:
                 for jump in unknow_rotation:
                     training_jumps.append(jump.to_dict())
-                self._database_manager.add_jumps_to_training(
-                    training_id, training_jumps
-                )
+                self._database_manager.add_jumps_to_training(training_id, training_jumps)
 
             _logger.info(f"Training {training_id} updated with jump data.")
 
@@ -454,7 +426,6 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         Check if two devices are the same
         """
         return self._usb_device == device._usb_device and self._bluetooth_device == device._bluetooth_device
-        
 
     def get_export_estimated_time(self) -> int:
         """
@@ -467,15 +438,16 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         return estimatedTime + 1
 
     def onBatteryUpdated(
-        self, device: movelladot_sdk.XsDotDevice, battery_level: int, charging_status: int
+        self,
+        device: movelladot_sdk.XsDotDevice,
+        battery_level: int,
+        charging_status: int,
     ):
         """
         Callback function that is called when the battery level is updated
         """
         self._is_battery_charging = charging_status == 1
-        _logger.info(
-            f"Battery level updated: {battery_level}%, Charging: {self._is_battery_charging}"
-        )
+        _logger.info(f"Battery level updated: {battery_level}%, Charging: {self._is_battery_charging}")
 
     def onButtonClicked(self, device: movelladot_sdk.XsDotDevice, timestamp: int):
         """
@@ -492,11 +464,11 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             return
 
         self._usb_manager.closePort(self._port_info_usb)
-        
+
         self._is_plugged = False
         self._is_battery_charging = False
         self._current_image = self._image_active
-        
+
         _logger.info("USB connexion closed.")
 
     def open_usb(self, should_stop_recording: bool, max_retries: int = 5):
@@ -509,13 +481,13 @@ class DotDevice(movelladot_sdk.XsDotCallback):
 
         for _ in range(max_retries):
             self._usb_manager.closePort(self._port_info_usb)  # Safety measure
-            
+
             is_success = self._usb_manager.openPort(self._port_info_usb)
             if not is_success:
                 _logger.error(f"Connexion to USB Device {self._port_info_usb.deviceId()} failed, retrying...")
                 time.sleep(1)
                 continue
-                
+
             device = self._usb_manager.usbDevice(self._port_info_usb.deviceId())
             if not device:
                 _logger.warning(f"Connexion to USB Device {self._port_info_usb.deviceId()} failed, retrying...")
@@ -530,11 +502,11 @@ class DotDevice(movelladot_sdk.XsDotCallback):
 
         self._usb_device = device
         _logger.info(f"USB connection established with device ID: {self.device_id}")
-        
+
         if should_stop_recording and self._bluetooth_device.deviceState() == 4:
             _logger.info("USB device is currently recording. Stopping recording...")
             self.stop_recording()
-        
+
         self._is_plugged = True
         self._is_battery_charging = True
         self._current_image = self._image_active

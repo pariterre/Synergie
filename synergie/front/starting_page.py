@@ -7,8 +7,8 @@ from tkinter.font import BOLD, Font
 import ttkbootstrap as ttkb
 
 from .img import logo_s2mjump_rgb_png_path
-from ..core.utils.DotDevice import DotDevice
-from ..core.database.DatabaseManager import DatabaseManager, TrainingData
+from ..core.utils.dot_device import DotDevice
+from ..core.database.database_manager import DatabaseManager, TrainingData
 
 
 class StartingPage:
@@ -39,9 +39,9 @@ class StartingPage:
         self._database_manager = database_manager
         self._device_tag = self._device.device_tag_name
 
-        self._window = ttkb.Toplevel(title="Confirmation", size=(1400,400), topmost=True)
+        self._window = ttkb.Toplevel(title="Confirmation", size=(1400, 400), topmost=True)
         self._window.place_window_center()
-        
+
         ico = Image.open(logo_s2mjump_rgb_png_path)
         photo = ImageTk.PhotoImage(ico)
         self._window.wm_iconphoto(False, photo)
@@ -50,50 +50,56 @@ class StartingPage:
         self._window.grid_columnconfigure(0, weight=1, pad=20)
         self._window.grid_columnconfigure(1, weight=0)
 
-        self._label = ttkb.Label(self._window, text=f"Lancer un enregistrement sur le capteur {self._device_tag}", font=Font(self._window, size=20, weight=BOLD))
-        self._label.grid(row=0,column=0,columnspan=2, pady=20)
+        self._label = ttkb.Label(
+            self._window,
+            text=f"Lancer un enregistrement sur le capteur {self._device_tag}",
+            font=Font(self._window, size=20, weight=BOLD),
+        )
+        self._label.grid(row=0, column=0, columnspan=2, pady=20)
 
         self._canvas = ttkb.Canvas(self._window)
-        self._canvas.grid_rowconfigure(0, weight = 1)
-        self._canvas.grid_columnconfigure(0, weight = 1)
+        self._canvas.grid_rowconfigure(0, weight=1)
+        self._canvas.grid_columnconfigure(0, weight=1)
 
         self._frame = ttkb.Frame(self._canvas)
-        self._frame.grid_rowconfigure(0, weight = 1)
-        self._frame.grid_rowconfigure(1, weight = 1)
-        self._frame.grid_columnconfigure(0, weight = 1)
-        self._frame.grid_columnconfigure(1, weight = 1)
-        self._frame.grid_columnconfigure(2, weight = 1)
-        self._frame.grid_columnconfigure(3, weight = 1)
-        self._frame.grid_columnconfigure(4, weight = 1)
+        self._frame.grid_rowconfigure(0, weight=1)
+        self._frame.grid_rowconfigure(1, weight=1)
+        self._frame.grid_columnconfigure(0, weight=1)
+        self._frame.grid_columnconfigure(1, weight=1)
+        self._frame.grid_columnconfigure(2, weight=1)
+        self._frame.grid_columnconfigure(3, weight=1)
+        self._frame.grid_columnconfigure(4, weight=1)
 
         skaters = self._database_manager.getAllSkaterFromCoach(user_id)
         button_style = ttkb.Style()
         button_style.configure("my.TButton", font=Font(self._frame, size=12, weight=BOLD))
-        for i,skater in enumerate(skaters):
+        for i, skater in enumerate(skaters):
             button = ttkb.Button(
-                self._frame, 
-                text=f"\n{skater.skater_name}\n", 
-                style="my.TButton", width=ceil((250-24)/11), 
+                self._frame,
+                text=f"\n{skater.skater_name}\n",
+                style="my.TButton",
+                width=ceil((250 - 24) / 11),
                 # TODO using partial?
-                command=(lambda x=skater.skater_id, y=skater.skater_name: self._start_record(x, y))
+                command=(lambda x=skater.skater_id, y=skater.skater_name: self._start_record(x, y)),
             )
-            button.grid(row=i//5+1,column=i%5,padx=10,pady=10)
-        
+            button.grid(row=i // 5 + 1, column=i % 5, padx=10, pady=10)
+
         self._frame.bind("<Enter>", self._bound_to_mousewheel)
         self._frame.bind("<Leave>", self._unbound_to_mousewheel)
 
         self._frame.grid(row=0, column=0, sticky="nswe")
-        
+
         scroll = ttkb.Scrollbar(self._window, orient=VERTICAL, command=self._canvas.yview)
-        scroll.grid(row=1,column=1, sticky="ns")
+        scroll.grid(row=1, column=1, sticky="ns")
 
         self._canvas.configure(yscrollcommand=scroll.set)
         self._canvas.bind(
-            "<Configure>", lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+            "<Configure>",
+            lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all")),
         )
         self._canvas.create_window((0, 0), window=self._frame, anchor="center")
 
-        self._canvas.grid(row=1,column=0, sticky="nswe", padx=10)
+        self._canvas.grid(row=1, column=0, sticky="nswe", padx=10)
 
         self._window.grid()
 
@@ -118,18 +124,18 @@ class StartingPage:
         self._canvas.destroy()
         self._label.destroy()
         self._frame = ttkb.Frame(self._window)
-        if record_started :
+        if record_started:
             message = f"Enregistrement commencé sur le capteur {self._device_tag} pour {skater_name}"
-        else : 
+        else:
             message = "Erreur durant le lancement, impossible de lancer l'enregistrement"
         label = ttkb.Label(self._frame, text=message, font=Font(self._window, size=20, weight=BOLD))
         label.grid()
-        self._frame.grid(row=1,column=0)
+        self._frame.grid(row=1, column=0)
         self._window.update()
         time.sleep(1)
         self._canvas.destroy()
         self._window.destroy()
-    
+
     def _bound_to_mousewheel(self, event):
         """
         Bind the mousewheel scrolling event to the canvas when the mouse is over the frame.

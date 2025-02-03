@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import math
 
-from .constants import JumpType, jumpSuccess
+from .constants import JumpType, JumpSuccess
 
 
 class Jump:
@@ -37,7 +37,7 @@ class Jump:
         data: pd.DataFrame,
         combinate: bool,
         jump_type: JumpType = JumpType.NONE,
-        jump_success: jumpSuccess = jumpSuccess.NONE,
+        jump_success: JumpSuccess = JumpSuccess.NONE,
     ) -> None:
         """
         Initialize a Jump instance with specific parameters.
@@ -61,15 +61,15 @@ class Jump:
         self._combinate = combinate
 
         # Calculate timestamps in seconds relative to the start of the session
-        self._start_timestamp = (data['SampleTimeFine'][start] - data['SampleTimeFine'][0]) / 1000
-        self._end_timestamp = (data['SampleTimeFine'][end] - data['SampleTimeFine'][0]) / 1000
+        self._start_timestamp = (data["SampleTimeFine"][start] - data["SampleTimeFine"][0]) / 1000
+        self._end_timestamp = (data["SampleTimeFine"][end] - data["SampleTimeFine"][0]) / 1000
 
         # Calculate the duration of the jump in seconds
         # 'ms' column is assumed to represent time in milliseconds
-        self._length = round(np.longlong(data['ms'][end] - data['ms'][start]) / 1000, 3)
+        self._length = round(np.longlong(data["ms"][end] - data["ms"][start]) / 1000, 3)
 
         # Calculate the total rotation during the jump
-        self._rotation = self._calculate_rotation(data[self._start:self._end].copy().reset_index())
+        self._rotation = self._calculate_rotation(data[self._start : self._end].copy().reset_index())
 
         # Resize the dataframe to focus on the jump period with additional frames before and after
         self._data = self._dynamic_resize(data)
@@ -77,27 +77,27 @@ class Jump:
 
         # Split the dataframe into parts potentially used for different analyses
         self._data_success = self._data[120:]  # Frames after index 120
-        self._data_type = self._data[:240]      # Frames up to index 240
+        self._data_type = self._data[:240]  # Frames up to index 240
 
         # Clean the original dataframe by replacing infinities and dropping NaNs in 'Gyr_X_unfiltered'
         data.replace([np.inf, -np.inf], np.nan, inplace=True)
         data.dropna(subset=["Gyr_X_unfiltered"], how="all", inplace=True)
 
         # Calculate the maximum rotation speed during the jump
-        self._max_rotation_speed = round(data['Gyr_X_unfiltered'][start:end].abs().max() / 360, 1)
+        self._max_rotation_speed = round(data["Gyr_X_unfiltered"][start:end].abs().max() / 360, 1)
 
     @property
     def start_timestamp(self) -> float:
         return self._start_timestamp
-    
+
     @property
     def end_timestamp(self) -> float:
         return self._end_timestamp
-    
+
     @property
     def rotation(self) -> float:
         return self._rotation
-    
+
     @property
     def max_rotation_speed(self) -> float:
         return self._max_rotation_speed
@@ -105,15 +105,15 @@ class Jump:
     @property
     def length(self) -> float:
         return self._length
-    
+
     @property
     def data(self) -> pd.DataFrame:
         return self._data.copy(deep=True)
-    
+
     @property
     def data_success(self) -> pd.DataFrame:
         return self._data_success.copy(deep=True)
-    
+
     @property
     def data_type(self) -> pd.DataFrame:
         return self._data_type.copy(deep=True)
@@ -156,12 +156,12 @@ class Jump:
         n = len(df_rots)
 
         # Extract and normalize timestamps
-        tps = df_rots['SampleTimeFine'].to_numpy()
+        tps = df_rots["SampleTimeFine"].to_numpy()
         tps = tps - tps[0]  # Relative to the first timestamp
         difftps = np.diff(tps) / 1e6  # Convert microseconds to seconds
 
         # Extract gyroscope angular velocities
-        vit = df_rots['Gyr_X'].to_numpy()[:-1]
+        vit = df_rots["Gyr_X"].to_numpy()[:-1]
 
         # Integrate angular velocity over time to get total rotation
         pos = np.nansum(vit * difftps)
@@ -183,6 +183,6 @@ class Jump:
             pd.DataFrame: A resized dataframe focused on the jump period with additional frames.
         """
         # Select 120 frames before the jump start and 180 frames after the jump end
-        resampled_df = df[self._start - 120:self._start + 180].copy(deep=True)
+        resampled_df = df[self._start - 120 : self._start + 180].copy(deep=True)
 
         return resampled_df

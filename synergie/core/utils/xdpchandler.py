@@ -1,21 +1,20 @@
-
 #  Copyright (c) 2003-2023 Movella Technologies B.V. or subsidiaries worldwide.
 #  All rights reserved.
-#  
+#
 #  Redistribution and use in source and binary forms, with or without modification,
 #  are permitted provided that the following conditions are met:
-#  
+#
 #  1.	Redistributions of source code must retain the above copyright notice,
 #  	this list of conditions and the following disclaimer.
-#  
+#
 #  2.	Redistributions in binary form must reproduce the above copyright notice,
 #  	this list of conditions and the following disclaimer in the documentation
 #  	and/or other materials provided with the distribution.
-#  
+#
 #  3.	Neither the names of the copyright holders nor the names of their contributors
 #  	may be used to endorse or promote products derived from this software without
 #  	specific prior written permission.
-#  
+#
 #  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
 #  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
 #  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
@@ -25,12 +24,11 @@
 #  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY OR
 #  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 #  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#  
+#
 
 import logging
 import time
 
-import user_settings  # TODO REMOVE THIS
 from .movella_loader import movelladot_sdk
 from .errors import UsbCommunicationError
 
@@ -38,15 +36,16 @@ _logger = logging.getLogger(__name__)
 
 
 class XdpcHandler(movelladot_sdk.XsDotCallback):
-    def __init__(self):
+    def __init__(self, whitelist: list[str] = None):
         movelladot_sdk.XsDotCallback.__init__(self)
 
-        self._manager : movelladot_sdk.XsDotConnectionManager = 0
+        self._manager: movelladot_sdk.XsDotConnectionManager = 0
         self._error_received = False
         self._update_done = False
         self._detected_dots: list[movelladot_sdk.XsPortInfo] = list()
         self._connected_dots: list[movelladot_sdk.XsDotDevice] = list()
         self._connected_usb_dots: list[movelladot_sdk.XsDotUsbDevice] = list()
+        self._whitelist = whitelist
 
     def initialize(self):
         """
@@ -119,7 +118,7 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
                 connected_devices_id = [x.deviceId() for x in self._connected_dots]
                 while True:
                     if self._manager.openPort(port_info):
-                        device : movelladot_sdk.XsDotDevice = self._manager.device(port_info.deviceId())
+                        device: movelladot_sdk.XsDotDevice = self._manager.device(port_info.deviceId())
                         if device is None or not device.deviceTagName():
                             continue
 
@@ -130,9 +129,11 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
                         _logger.error(f"Connection to Device {address} failed")
 
                 _logger.info(f"Found a device with Tag: {device.deviceTagName()} @ address: {address}")
-                
+
             else:
-                _logger.info(f"Opening DOT with ID: {port_info.deviceId().toXsString()} @ port: {port_info.portName()}, baudrate: {port_info.baudrate()}")
+                _logger.info(
+                    f"Opening DOT with ID: {port_info.deviceId().toXsString()} @ port: {port_info.portName()}, baudrate: {port_info.baudrate()}"
+                )
                 if not self._manager.openPort(port_info):
                     _logger.error(f"Could not open DOT. Reason: {self._manager.lastResultText()}")
                     continue
@@ -157,7 +158,7 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
         """
         return self._detected_dots
 
-    def connected_dots(self)-> list[movelladot_sdk.XsDotDevice]:
+    def connected_dots(self) -> list[movelladot_sdk.XsDotDevice]:
         """
         Returns:
             A list containing an XsDotDevice pointer for each Movella DOT device connected via Bluetooth
@@ -191,13 +192,13 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
         """
         self._update_done = False
 
-    def onAdvertisementFound(self, port_info):
+    def onAdvertisementFound(self, port_info: movelladot_sdk.XsPortInfo):
         """
         Called when an Movella DOT device advertisement was received. Updates m_detectedDots.
         Parameters:
             port_info: The XsPortInfo of the discovered information
         """
-        if not user_settings.whitelist or port_info.bluetoothAddress() in user_settings.whitelist:
+        if not self._whitelist or port_info.bluetoothAddress() in self._whitelist:
             self._detected_dots.append(port_info)
         else:
             _logger.debug(f"Ignoring {port_info.bluetoothAddress()}")
@@ -219,5 +220,7 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
             portInfo: The XsPortInfo of the updated device
             result: The XsDotFirmwareUpdateResult of the firmware update
         """
-        _logger.info(f"\n{portInfo.bluetoothAddress()}  Firmware Update done. Result: {movelladot_sdk.XsDotFirmwareUpdateResultToString(result)}")
+        _logger.info(
+            f"\n{portInfo.bluetoothAddress()}  Firmware Update done. Result: {movelladot_sdk.XsDotFirmwareUpdateResultToString(result)}"
+        )
         self._update_done = True
