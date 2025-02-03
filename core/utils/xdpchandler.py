@@ -28,11 +28,11 @@
 #  
 
 import logging
-from typing import List
 import time
 
-from user_settings import *  # TODO REMOVE THIS
+import user_settings  # TODO REMOVE THIS
 from .movella_loader import movelladot_sdk
+from .errors import UsbCommunicationError
 
 _logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
         self._manager = movelladot_sdk.XsDotConnectionManager()
         if self._manager is None:
             _logger.error("Manager could not be constructed, exiting.")
-            raise ValueError("Manager could not be constructed, exiting.")
+            raise UsbCommunicationError()
 
         # Attach callback handler (self) to connection manager
         self._manager.addXsDotCallbackHandler(self)
@@ -197,7 +197,7 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
         Parameters:
             port_info: The XsPortInfo of the discovered information
         """
-        if not whitelist or port_info.bluetoothAddress() in whitelist:
+        if not user_settings.whitelist or port_info.bluetoothAddress() in user_settings.whitelist:
             self._detected_dots.append(port_info)
         else:
             _logger.debug(f"Ignoring {port_info.bluetoothAddress()}")

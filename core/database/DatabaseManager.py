@@ -9,7 +9,7 @@ from firebase_admin import firestore
 import firebase_admin.firestore
 
 from core.utils.connexion import has_internet_connection
-from core.utils.errors import InternetConnectionError, InvalidCertificateError
+from core.utils.errors import InternetConnectionError, InvalidCertificateError, NoDataFoundForId
 
 _logger = logging.getLogger(__name__)
 
@@ -364,7 +364,7 @@ class DatabaseManager:
             JumpData: The JumpData object representing the jump.
 
         Raises:
-            ValueError: If no jump document with the given ID exists.
+            NoDataFoundForId: If no jump document with the given ID exists.
         """
         jump_doc = self.db.collection("jumps").document(jump_id).get()
 
@@ -381,7 +381,7 @@ class DatabaseManager:
                 jump_max_speed=jump_data["jump_max_speed"]
             )
         else:
-            raise ValueError(f"Aucun jump trouvé avec l'identifiant {jump_id}")
+            raise NoDataFoundForId(data_type="jump", data_id=jump_id)
 
     def get_skater_name_from_training_id(self, training_id: str) -> str:
         """

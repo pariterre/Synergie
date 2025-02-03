@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 import constants
 from core.database.DatabaseManager import DatabaseManager, JumpData
-from .errors import UsbCommunicationError
+from .errors import UsbCommunicationError, DeviceNotFoundError
 from .movella_loader import movelladot_sdk
 
 _logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         if self._usb_device:
             return str(self._usb_device.deviceId())
         
-        raise RuntimeError("No device connected")
+        raise DeviceNotFoundError(device_id=str(self._usb_device.deviceId()))
 
     @property
     def device_tag_name(self) -> str:
