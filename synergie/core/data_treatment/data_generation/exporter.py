@@ -39,6 +39,9 @@ def export(df: pd.DataFrame, sample_time_fine_synchro: int = 0) -> pd.DataFrame:
         all_jumps.append(jump_copy)
         predict_jump.append(jump_copy.data)
 
+    if not all_jumps:
+        return pd.DataFrame()
+
     # TODO: load once the model, not for each jump
     model_test_type = model.load_model(constants.filepath_model_type)
     model_test_success = model.load_model(constants.filepath_model_success)
@@ -62,10 +65,7 @@ def export(df: pd.DataFrame, sample_time_fine_synchro: int = 0) -> pd.DataFrame:
                 }
             )
 
-    jumps_as_df = pd.DataFrame(jumps)
-    jumps_as_df = jumps_as_df.sort_values(by=["videoTimeStamp"])
-
-    return jumps_as_df
+    return pd.DataFrame(jumps).sort_values(by=["videoTimeStamp"])
 
 
 def old_export():

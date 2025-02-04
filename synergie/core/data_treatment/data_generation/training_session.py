@@ -7,7 +7,7 @@ from ...utils import plot
 from ...utils.jump import Jump
 
 
-def gather_jumps(df: pd.DataFrame) -> list[Jump]:
+def _gather_jumps(df: pd.DataFrame) -> list[Jump]:
     """
     detects and gathers all the jumps in a dataframe
     :param df: the dataframe containing the session data
@@ -41,15 +41,15 @@ class trainingSession:
     contains the preprocessed dataframe and the jumps
     """
 
-    def __init__(self, df: pd.DataFrame, sampleTimefineSynchro: int = 0):
+    def __init__(self, df: pd.DataFrame, sample_time_fine_synchro: int = 0):
         """
         :param path: path of the CSV
         :param synchroFrame: the frame where the synchro tap is
         """
-        df = self._load_and_preprocess_data(df, sampleTimefineSynchro)
+        df = self._load_and_preprocess_data(df, sample_time_fine_synchro)
         self._init_from_dataframe(df)
 
-    def _load_and_preprocess_data(self, df: pd.DataFrame, sampleTimefineSynchro: int = 0) -> pd.DataFrame:
+    def _load_and_preprocess_data(self, df: pd.DataFrame, sample_time_fine_synchro: int = 0) -> pd.DataFrame:
         """
         loads a dataframe from a csv, and preprocess data
         :param self: path to the csv file
@@ -71,9 +71,9 @@ class trainingSession:
             }
         )
 
-        if sampleTimefineSynchro != 0:
+        if sample_time_fine_synchro != 0:
             # slice the list from sampleTimefineSynchro
-            synchroIndex = df[df["SampleTimeFine"] >= sampleTimefineSynchro].index[0]
+            synchroIndex = df[df["SampleTimeFine"] >= sample_time_fine_synchro].index[0]
             df = df[synchroIndex:].reset_index(drop=True)
         df = df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
         # adding the ms field, indicating how much ms has past since the beginning of the recording
@@ -96,9 +96,7 @@ class trainingSession:
         df["X_gyr_second_derivative"] = df["X_gyr_derivative"].diff()
 
         # add markers when the value is crossing -0.2
-        df["X_gyr_second_derivative_crossing"] = [
-            False if x > constants.treshold else True for x in df["X_gyr_second_derivative"]
-        ]
+        df["X_gyr_second_derivative_crossing"] = [x <= constants.treshold for x in df["X_gyr_second_derivative"]]
         return df
 
     def _init_from_dataframe(self, df: pd.DataFrame):
@@ -108,7 +106,7 @@ class trainingSession:
         :param df: the dataframe containing the whole session
         """
         self.df = df
-        self.jumps = gather_jumps(df)
+        self.jumps = _gather_jumps(df)
 
     def plot(self):
         timestamps = [jump.start_timestamp for jump in self.jumps] + [jump.end_timestamp for jump in self.jumps]

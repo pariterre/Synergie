@@ -9,7 +9,7 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 from . import constants
-from .errors import UsbCommunicationError, DeviceNotFoundError
+from .errors import BluetoothCommunicationError, UsbCommunicationError, DeviceNotFoundError
 from .movella_loader import movelladot_sdk
 from ..database.database_manager import DatabaseManager, JumpData
 from ...front.img import dot_active_path, dot_inactive_path
@@ -20,6 +20,7 @@ _logger = logging.getLogger(__name__)
 def initialize_bluetooth_dot_device(
     bluetooth_manager: movelladot_sdk.XsDotConnectionManager,
     port_info_bluetooth: movelladot_sdk.XsPortInfo,
+    retries: int = 5,
 ) -> movelladot_sdk.XsDotDevice:
     """
     Initialize the Bluetooth connection
@@ -27,7 +28,7 @@ def initialize_bluetooth_dot_device(
     Raises:
         Exception: If the connection to the device fails
     """
-    while True:
+    for _ in range(retries):
         _logger.warning(f"Connecting to bluetooth device {port_info_bluetooth.bluetoothAddress()}...")
         bluetooth_manager.closePort(port_info_bluetooth)
         if bluetooth_manager.openPort(port_info_bluetooth):
@@ -38,6 +39,9 @@ def initialize_bluetooth_dot_device(
                     return device
         _logger.warning(f"connexion failed, retrying...")
         time.sleep(0.1)
+    else:
+        _logger.error(f"Could not connect to bluetooth device {port_info_bluetooth.bluetoothAddress()}")
+        raise BluetoothCommunicationError()
 
 
 class DotDevice(movelladot_sdk.XsDotCallback):
@@ -71,8 +75,7 @@ class DotDevice(movelladot_sdk.XsDotCallback):
             self._bluetooth_manager = movelladot_sdk.XsDotConnectionManager()
         self._bluetooth_manager.addXsDotCallbackHandler(self)
         self._bluetooth_device = initialize_bluetooth_dot_device(
-            bluetooth_manager=self._bluetooth_manager,
-            port_info_bluetooth=self._port_info_bluetooth,
+            bluetooth_manager=self._bluetooth_manager, port_info_bluetooth=self._port_info_bluetooth
         )
 
         self._load_images()
@@ -190,11 +193,11 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         bool: Whether the recording was stopped successfully
         """
 
-        if self._bluetooth_device.deviceState() == 4:
+        if self._bluetooth_device.deviceState() in (0, 4):
             is_success = self._bluetooth_device.stopRecording()
             if not is_success:
                 _logger.error("Something went wrong while trying to stop recording on the Bluetooth device.")
-                return
+                return False
 
         self._is_recording = False
         self._recording_count = self._usb_device.recordingCount()
@@ -299,11 +302,20 @@ class DotDevice(movelladot_sdk.XsDotCallback):
                 self._recording_count -= 1
 
         # Erase sensor's flash memory after exporting
-        self._usb_device.eraseFlash()
-        _logger.info("You can disconnect the dot.")
+        retries = 5
+        for _ in range(retries):
+            is_success = self._usb_device.eraseFlash()
+            if is_success:
+                break
+            time.sleep(1)
+        else:
+            _logger.error("Could not erase flash memory after export.")
+            raise UsbCommunicationError()
+
         self._recording_count = 0
+
+        _logger.info("You can disconnect the dot.")
         extract_event.set()
-        self._current_image = self._image_inactive
 
     def _predict_training(self, training_id: str, df: pd.DataFrame):
         from ..data_treatment.data_generation.exporter import export
@@ -322,12 +334,8 @@ class DotDevice(movelladot_sdk.XsDotCallback):
                 val_rot = float(row["rotations"])
 
                 if row["type"] < 5 and val_rot > 0.5:
-                    if val_rot < 2:
-                        val_rot = np.ceil(val_rot - 0.3)
-                    else:
-                        val_rot = np.ceil(val_rot - 0.15)
+                    val_rot = np.ceil(val_rot - 0.3) if val_rot < 2 else np.ceil(val_rot - 0.15)
                     jump_data = JumpData(
-                        0,
                         training_id,
                         constants.JumpType(int(row["type"])).name,
                         val_rot,
@@ -340,7 +348,6 @@ class DotDevice(movelladot_sdk.XsDotCallback):
                 elif row["type"] == 5 and val_rot > 0.8:
                     val_rot = np.ceil(val_rot - 0.7) + 0.5
                     jump_data = JumpData(
-                        0,
                         training_id,
                         constants.JumpType(int(row["type"])).name,
                         val_rot,
@@ -352,7 +359,6 @@ class DotDevice(movelladot_sdk.XsDotCallback):
                     training_jumps.append(jump_data.to_dict())
                 else:
                     jump_data = JumpData(
-                        0,
                         training_id,
                         constants.JumpType(int(row["type"])).name,
                         0,
@@ -361,14 +367,12 @@ class DotDevice(movelladot_sdk.XsDotCallback):
                         float(row["rotation_speed"]),
                         float(row["length"]),
                     )
-                    unknow_rotation.append(jump_data)
+                    unknow_rotation.append(jump_data.to_dict())
 
             if training_jumps:
                 self._database_manager.add_jumps_to_training(training_id, training_jumps)
             else:
-                for jump in unknow_rotation:
-                    training_jumps.append(jump.to_dict())
-                self._database_manager.add_jumps_to_training(training_id, training_jumps)
+                self._database_manager.add_jumps_to_training(training_id, unknow_rotation)
 
             _logger.info(f"Training {training_id} updated with jump data.")
 
@@ -503,9 +507,8 @@ class DotDevice(movelladot_sdk.XsDotCallback):
         self._usb_device = device
         _logger.info(f"USB connection established with device ID: {self.device_id}")
 
-        if should_stop_recording and self._bluetooth_device.deviceState() == 4:
-            _logger.info("USB device is currently recording. Stopping recording...")
-            self.stop_recording()
+        if self.stop_recording():
+            _logger.info("USB device was recording and has been stopped.")
 
         self._is_plugged = True
         self._is_battery_charging = True

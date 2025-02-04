@@ -1,6 +1,7 @@
 import keras
 from keras import layers
 import keras_tuner
+import tf_keras
 
 
 def lstm():
@@ -206,5 +207,7 @@ def load_model(path="saved_models/model.keras"):
     Returns:
         keras.Model: The loaded Keras model.
     """
-
-    return keras.saving.load_model(path)
+    try:
+        return keras.saving.load_model(path)
+    except:
+        return tf_keras.saving.load_model(path)

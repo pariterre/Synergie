@@ -122,7 +122,7 @@ class StopingPage:
             pass
         self._window.update()
         if self._extract_event.is_set():
-            self._text.set("Extraction finie")
+            self._text.set("Extraction terminée")
             self._label.update()
             time.sleep(1)
             self._window.destroy()

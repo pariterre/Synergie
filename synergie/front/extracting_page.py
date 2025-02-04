@@ -44,7 +44,7 @@ class ExtractingPage:
         except:
             pass
         if self._event.is_set():
-            self.text.set("Extraction finie")
+            self.text.set("Extraction terminée")
             self._label.update()
             time.sleep(1)
             self._window.destroy()

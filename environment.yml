@@ -13,9 +13,10 @@ dependencies:
   - pip
   - pip:
     - firebase-admin
-    - keras==2.14.0
+    - keras
     - keras_tuner
-    - tensorflow==2.14.0
+    - tf_keras
+    - tensorflow
     - ttkbootstrap
     - winsdk
   
