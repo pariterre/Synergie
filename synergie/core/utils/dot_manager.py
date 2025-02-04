@@ -1,3 +1,4 @@
+from enum import Enum, auto
 import logging
 import os
 import threading
@@ -17,6 +18,19 @@ from .xdpchandler import XdpcHandler
 from ..database.database_manager import DatabaseManager
 
 _logger = logging.getLogger(__name__)
+
+
+class DotConnexionStatus(Enum):
+    """
+    Enumeration of the possible states of a DotDevice.
+    """
+
+    DISCONNECTED = auto()
+    CONNECTING_USB = auto()
+    CONNECTING_BLUETOOTH = auto()
+    IDENTIFYING_BLUETOOTH_DEVICES = auto()
+    CONNECTED = auto()
+    MONITORING_STARTED = auto()
 
 
 async def _bluetooth_power(turn_on: bool):
@@ -51,8 +65,13 @@ class DotManager:
         self._database_manager = database_manager
         self._devices: list[DotDevice] = []
         self._previous_plugged_devices: list[DotDevice] = []
+        self._status = DotConnexionStatus.DISCONNECTED
 
-    def initialize_connexion(self, dots_white_list: list[str]) -> None:
+    @property
+    def status(self):
+        return self._status
+
+    def initialize_connexion(self, dots_white_list: list[str], events: threading.Event) -> None:
         """
         Initial connection to sensors.
 
@@ -86,6 +105,8 @@ class DotManager:
             raise BluetoothCommunicationError()
 
         # Connect USB devices
+        self._status = DotConnexionStatus.CONNECTING_USB
+        events.set()
         port_info_usb = {}
         xdpc_handler.detect_usb_devices()
         while len(xdpc_handler.connected_usb_dots()) < len(xdpc_handler.detected_dots()):
@@ -103,6 +124,9 @@ class DotManager:
         else:
             raise NotImplementedError("Bluetooth power control not implemented for this OS.")
 
+        # Initialize Bluetooth connection handler
+        self._status = DotConnexionStatus.CONNECTING_BLUETOOTH
+        events.set()
         xdpc_handler = XdpcHandler(whitelist=dots_white_list)
         if not xdpc_handler.initialize():
             xdpc_handler.cleanup()
@@ -113,6 +137,9 @@ class DotManager:
         xdpc_handler.cleanup()
         _logger.info(f"Detected Bluetooth devices: {[info.bluetoothAddress() for info in port_info_bluetooth]}")
 
+        # Connect Bluetooth devices
+        self._status = DotConnexionStatus.IDENTIFYING_BLUETOOTH_DEVICES
+        events.set()
         unconnected_devices = []
         for port_info_bluetooth in port_info_bluetooth:
             device = self._database_manager.get_dot_from_bluetooth(port_info_bluetooth.bluetoothAddress())
@@ -138,9 +165,17 @@ class DotManager:
 
         self._previous_plugged_devices = self._devices
 
+        self._status = DotConnexionStatus.CONNECTED
+        events.set()
+
         return
 
-    def start_usb_monitoring(self, start_recording_callback, stop_recording_callback):
+    def start_usb_monitoring(
+        self,
+        start_recording_callback: Callable[[DotDevice], None],
+        stop_recording_callback: Callable[[DotDevice], None],
+        events: threading.Event,
+    ):
         """
         Start monitoring USB devices.
 
@@ -155,7 +190,14 @@ class DotManager:
         )
         usb_detection_thread.start()
 
-    def _monitor_usb_dots(self, start_recording_callback, stop_recording_callback):
+        self._status = DotConnexionStatus.MONITORING_STARTED
+        events.set()
+
+    def _monitor_usb_dots(
+        self,
+        start_recording_callback: Callable[[DotDevice], None],
+        stop_recording_callback: Callable[[DotDevice], None],
+    ):
         """
         Continuously monitor device connection status. If a device is connected
         while recording, stop it and notify the user. If a device is disconnected while

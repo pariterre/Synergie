@@ -7,7 +7,7 @@ from .dot_page import DotPage
 from .extracting_page import ExtractingPage
 from ..core.database.database_manager import DatabaseManager
 from ..core.utils.dot_device import DotDevice
-from ..core.utils.dot_manager import DotManager
+from ..core.utils.dot_manager import DotManager, DotConnexionStatus
 
 
 class MainPage:
@@ -32,12 +32,8 @@ class MainPage:
         button_style.configure("home.TButton", font=Font(self._frame, size=20, weight=BOLD))
         label_font = Font(self._root, size=15, weight=BOLD)
         self._waiting_frame = ttkb.Frame(self._frame)
-        waiting_label = ttkb.Label(
-            self._waiting_frame,
-            text="En attente de connexion aux capteurs",
-            font=label_font,
-        )
-        waiting_label.grid(row=0, column=0, pady=50)
+        self._waiting_label = ttkb.Label(self._waiting_frame, text="Connexion aux capteurs USB...", font=label_font)
+        self._waiting_label.grid(row=0, column=0, pady=50)
         waiting_progress = ttkb.Progressbar(self._waiting_frame, mode="indeterminate", length=200)
         waiting_progress.grid(row=1, column=0)
         waiting_progress.start(10)
@@ -56,6 +52,18 @@ class MainPage:
     def dots_connected(self, dots_connected: list[DotDevice]):
         self._dots_connected = dots_connected
         self._make_dot_page()
+
+    def connexion_status_changed(self, status: DotConnexionStatus):
+        if status == DotConnexionStatus.CONNECTING_USB:
+            self._waiting_label.config(text="Connexion aux capteurs USB...")
+        elif status == DotConnexionStatus.CONNECTING_BLUETOOTH:
+            self._waiting_label.config(text="Connexion aux capteurs Bluetooth...")
+        elif status == DotConnexionStatus.IDENTIFYING_BLUETOOTH_DEVICES:
+            self._waiting_label.config(text="Identification des capteurs Bluetooth...")
+        elif status == DotConnexionStatus.CONNECTED:
+            self._waiting_label.config(text="Connexion établie, lancement du monitoring...")
+        else:
+            self._waiting_label.config(text="Erreur de connexion, veuillez réessayer...")
 
     def _make_dot_page(self):
         self._frame.destroy()
@@ -118,9 +126,7 @@ class MainPage:
             if not device._is_recording and device.is_plugged and device.recording_count > 0:
                 extract_event = threading.Event()
                 threading.Thread(
-                    target=device.export_data,
-                    args=([bool(self._save_data_to_file), extract_event]),
-                    daemon=True,
+                    target=device.export_data, args=([bool(self._save_data_to_file), extract_event]), daemon=True
                 ).start()
                 ExtractingPage(device.device_tag_name, self._estimated_time, extract_event)
 

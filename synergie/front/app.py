@@ -1,5 +1,6 @@
 import logging
 import threading
+from typing import Callable
 
 from PIL import Image, ImageTk
 from tkinter import messagebox
@@ -11,7 +12,7 @@ from .main_page import MainPage
 from .starting_page import StartingPage
 from .stoping_page import StopingPage
 from ..core.database.database_manager import DatabaseManager
-from ..core.utils.dot_manager import DotManager
+from ..core.utils.dot_manager import DotManager, DotConnexionStatus
 from ..core.utils.errors import (
     InternetConnectionError,
     InvalidCertificateError,
@@ -128,21 +129,35 @@ class App:
         self._main_page = MainPage([], self._dot_manager, self._database_manager, self._root_window)
 
         # Run the initialization in a separate thread to avoid blocking the UI.
-        initialialize_event = threading.Event()
-        threading.Thread(
-            target=self._initialize_dot_manager,
-            args=([initialialize_event]),
-            daemon=True,
-        ).start()
-        self._wait_for_event(initialialize_event, self._show_dots_connected_page)
+        initialialize_events = threading.Event()
+        threading.Thread(target=self._initialize_dot_manager, args=([initialialize_events]), daemon=True).start()
+        self._wait_for_event(initialialize_events, self._wait_while_connecting_dots)
 
-    def _show_dots_connected_page(self):
+    def _wait_while_connecting_dots(self, event: threading.Event):
         """
         Show the MainPage once all devices are connected.
         """
-        self._main_page.dots_connected = self._dot_manager.get_devices()
 
-    def _wait_for_event(self, event: threading.Event, callback_when_set: callable):
+        should_restart_the_wait = True
+        if self._dot_manager.status in (
+            DotConnexionStatus.DISCONNECTED,
+            DotConnexionStatus.CONNECTING_USB,
+            DotConnexionStatus.CONNECTING_BLUETOOTH,
+            DotConnexionStatus.IDENTIFYING_BLUETOOTH_DEVICES,
+            DotConnexionStatus.CONNECTED,
+        ):
+            self._main_page.connexion_status_changed(self._dot_manager.status)
+        elif self._dot_manager.status == DotConnexionStatus.MONITORING_STARTED:
+            self._main_page.dots_connected = self._dot_manager.get_devices()
+            should_restart_the_wait = False
+        else:
+            _logger.error("Unknown status while connecting dots")
+
+        if should_restart_the_wait:
+            event.clear()
+            self._wait_for_event(event, self._wait_while_connecting_dots)
+
+    def _wait_for_event(self, event: threading.Event, callback_when_set: Callable[[threading.Event], None]):
         """
         Wait for a given event to be set.
 
@@ -153,10 +168,10 @@ class App:
             self._root_window.after(100, self._wait_for_event, event, callback_when_set)
             return
 
-        callback_when_set()
+        callback_when_set(event)
         event.clear()
 
-    def _initialize_dot_manager(self, initialialize_event: threading.Event):
+    def _initialize_dot_manager(self, initialialize_events: threading.Event):
         """
         Attempt the first connection to all necessary devices (dots).
         If any device is not connected, prompt the user to retry until all
@@ -164,11 +179,13 @@ class App:
         to monitor device connections/disconnections (USB events).
 
         Args:
-            initialialize_event (threading.Event): An event to set once initialization is done.
+            initialialize_events (threading.Event): An event to set once initialization is done.
         """
         while True:
             try:
-                self._dot_manager.initialize_connexion(dots_white_list=self._dots_white_list)
+                self._dot_manager.initialize_connexion(
+                    dots_white_list=self._dots_white_list, events=initialialize_events
+                )
                 break
             except MissingSensorsError as e:
                 _logger.error(f"Missing sensors: {e.sensor_names}")
@@ -178,8 +195,9 @@ class App:
                 )
 
         # Notify the main thread that initialization is done.
-        self._dot_manager.start_usb_monitoring(self._show_start_page, self._show_stopping_page)
-        initialialize_event.set()
+        self._dot_manager.start_usb_monitoring(
+            self._show_start_page, self._show_stopping_page, events=initialialize_events
+        )
 
     def _show_start_page(self, device):
         """
