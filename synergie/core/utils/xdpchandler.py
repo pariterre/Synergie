@@ -74,13 +74,17 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
         """
         self._manager.close()
 
-    def scan_for_dots(self):
+    def scan_for_dots(self, white_list: list[str] = None):
         """
         Scan if any Movella DOT devices can be detected via Bluetooth
 
         Enables device detection in the connection manager and uses the
         onAdvertisementFound callback to detect active Movella DOT devices
         Disables device detection when done
+
+        Parameters:
+            white_list: A list of Bluetooth addresses to scan for. If all the MAC addresses
+            are found, the scan will stop early
 
         """
         # Start a scan and wait until we have found one or more DOT Devices
@@ -96,6 +100,10 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
             if len(connected) != count:
                 count = len(connected)
                 _logger.info(f"New dot connected, total of {count} connected.")
+
+            if white_list and all([x.bluetoothAddress() for x in connected]):
+                time.sleep(1)  # Give a bit of time otherwise it does not add them
+                break
 
         self._manager.disableDeviceDetection()
         _logger.info("Stopped scanning for devices.")

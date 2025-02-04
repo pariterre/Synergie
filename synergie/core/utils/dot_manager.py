@@ -107,12 +107,15 @@ class DotManager:
         # Connect USB devices
         self._status = DotConnexionStatus.CONNECTING_USB
         events.set()
-        port_info_usb = {}
+        port_info_usb: dict[str, movelladot_sdk.XsPortInfo] = {}
+        mac_addresses: list[str] = []
         xdpc_handler.detect_usb_devices()
         while len(xdpc_handler.connected_usb_dots()) < len(xdpc_handler.detected_dots()):
             xdpc_handler.connect_dots()
         for device in xdpc_handler.connected_usb_dots():
-            port_info_usb[str(device.deviceId())] = device.portInfo()
+            device_id = str(device.deviceId())
+            port_info_usb[device_id] = device.portInfo()
+            mac_addresses.append(device.bluetoothAddress())
         xdpc_handler.cleanup()
         _logger.info(f"Connected USB devices: {list(port_info_usb.keys())}")
 
@@ -132,7 +135,7 @@ class DotManager:
             xdpc_handler.cleanup()
             _logger.error("XdpcHandler initialization failed.")
             raise BluetoothCommunicationError()
-        xdpc_handler.scan_for_dots()
+        xdpc_handler.scan_for_dots(white_list=mac_addresses)
         port_info_bluetooth = xdpc_handler.detected_dots()
         xdpc_handler.cleanup()
         _logger.info(f"Detected Bluetooth devices: {[info.bluetoothAddress() for info in port_info_bluetooth]}")
