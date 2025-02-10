@@ -52,7 +52,7 @@ def export(df: pd.DataFrame, sample_time_fine_synchro: int = 0) -> pd.DataFrame:
     for i, jump in enumerate(all_jumps):
         if jump.data is None:
             continue
-        if len(jump.data) == 400:
+        if len(jump.data) == 300:  # TODO Reinstate the proper number here (initially 400)
             # since videoTimeStamp is for user input, I can change it's value to whatever I want
             jumps.append(
                 {

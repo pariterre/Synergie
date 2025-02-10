@@ -19,8 +19,18 @@ class ModelPredictor:
         for index, df in enumerate(data):
             df_predictjump = df
             if len(df_predictjump) == 300:
-                predict_jump_type.append(df_predictjump[:240])
-                predict_jump_success.append(df_predictjump[120:])
+                # TODO Put the real columns indices (initially df_predictjump[:240])
+                predict_jump_type.append(df_predictjump[:240].astype(float).iloc[:, 2:12])
+
+                # TODO Put the real columns and rows indices (initially df_predictjump[120:])
+                predict_jump_success.append(
+                    np.concatenate(
+                        (
+                            np.array(df_predictjump.astype(float).iloc[:, :9]),
+                            np.array(df_predictjump.astype(float).iloc[:100, :9]),
+                        )
+                    )
+                )
             else:
                 predict_type[index] = 8
                 predict_success[index] == 2
