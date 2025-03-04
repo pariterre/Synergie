@@ -27,7 +27,11 @@ class LoadingPage:
 
         # A bold font for labels.
         label_font = Font(self._root, size=15, weight=BOLD)
-        self._label = ttkb.Label(self._frame, text="Initialisation de l'application...", font=label_font)
+        self._label = ttkb.Label(
+            self._frame,
+            text="Initialisation de l'application (ceci peut prendre plusieurs minutes)...",
+            font=label_font,
+        )
         self._label.grid(row=0, column=0, sticky="s")
 
         # Place the frame in the main window.

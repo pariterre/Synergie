@@ -135,10 +135,17 @@ class DotManager:
             xdpc_handler.cleanup()
             _logger.error("XdpcHandler initialization failed.")
             raise BluetoothCommunicationError()
-        xdpc_handler.scan_for_dots(white_list=mac_addresses)
-        port_info_bluetooth = xdpc_handler.detected_dots()
-        xdpc_handler.cleanup()
-        _logger.info(f"Detected Bluetooth devices: {[info.bluetoothAddress() for info in port_info_bluetooth]}")
+
+        # Scan for Bluetooth devices
+        while True:
+            xdpc_handler.scan_for_dots(white_list=mac_addresses)
+            port_info_bluetooth = xdpc_handler.detected_dots()
+            xdpc_handler.cleanup()
+            _logger.info(f"Detected Bluetooth devices: {[info.bluetoothAddress() for info in port_info_bluetooth]}")
+
+            if all(str(info.bluetoothAddress()) in mac_addresses for info in port_info_bluetooth):
+                break
+            time.sleep(1)
 
         # Connect Bluetooth devices
         self._status = DotConnexionStatus.IDENTIFYING_BLUETOOTH_DEVICES
