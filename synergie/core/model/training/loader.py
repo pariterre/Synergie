@@ -56,7 +56,7 @@ class Loader:
                 jumps.append(
                     (
                         np.nan_to_num(
-                            jumpFrame[:240].copy().to_numpy(),
+                            jumpFrame[: (2 * constants.frames_before_jump)].copy().to_numpy(),
                             nan=0.0,
                             posinf=0.0,
                             neginf=0.0,
@@ -67,7 +67,7 @@ class Loader:
                 jumps_success.append(
                     (
                         np.nan_to_num(
-                            jumpFrame[120:].copy().reset_index(drop=True).to_numpy(),
+                            jumpFrame[constants.frames_before_jump :].copy().reset_index(drop=True).to_numpy(),
                             nan=0.0,
                             posinf=0.0,
                             neginf=0.0,

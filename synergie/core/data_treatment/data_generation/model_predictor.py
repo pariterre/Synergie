@@ -1,8 +1,8 @@
 import keras
-import tensorflow as tf
-
 import numpy as np
 import pandas as pd
+
+from ...utils import constants
 
 
 class ModelPredictor:
@@ -18,9 +18,9 @@ class ModelPredictor:
 
         for index, df in enumerate(data):
             df_predictjump = df
-            if len(df_predictjump) == 300:
-                predict_jump_type.append(df_predictjump[:240])
-                predict_jump_success.append(df_predictjump[120:])
+            if len(df_predictjump) == constants.frames_before_jump + constants.frames_after_jump:
+                predict_jump_type.append(df_predictjump[constants.fields_to_keep][: (2 * constants.frames_before_jump)])
+                predict_jump_success.append(df_predictjump[constants.fields_to_keep][(constants.frames_before_jump) :])
             else:
                 predict_type[index] = 8
                 predict_success[index] == 2

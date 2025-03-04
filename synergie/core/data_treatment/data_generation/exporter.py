@@ -1,3 +1,4 @@
+from functools import cache
 import copy
 import os
 
@@ -9,15 +10,26 @@ from ...utils.jump import Jump
 
 
 def mstostr(ms: float):
-
     s = round(ms / 1000)
     return "{:02d}:{:02d}".format(s // 60, s % 60)
 
 
-def export(df: pd.DataFrame, sample_time_fine_synchro: int = 0) -> pd.DataFrame:
-    from .model_predictor import ModelPredictor
-    from .training_session import trainingSession
+def preload_resources():
+    _get_model_predictor()
+
+
+@cache
+def _get_model_predictor():
     from ...model import model
+    from .model_predictor import ModelPredictor
+
+    model_jump_type = model.load_model(constants.filepath_model_type)
+    model_is_jump_success = model.load_model(constants.filepath_model_success)
+    return ModelPredictor(model_jump_type, model_is_jump_success)
+
+
+def export(df: pd.DataFrame, sample_time_fine_synchro: int = 0) -> pd.DataFrame:
+    from .training_session import trainingSession
 
     """
     exports the data to a folder, in order to be used by the ML model
@@ -42,17 +54,14 @@ def export(df: pd.DataFrame, sample_time_fine_synchro: int = 0) -> pd.DataFrame:
     if not all_jumps:
         return pd.DataFrame()
 
-    # TODO: load once the model, not for each jump
-    model_test_type = model.load_model(constants.filepath_model_type)
-    model_test_success = model.load_model(constants.filepath_model_success)
-    prediction = ModelPredictor(model_test_type, model_test_success)
+    prediction = _get_model_predictor()
     predict_type, predict_success = prediction.predict(predict_jump)
 
     jumps = []
     for i, jump in enumerate(all_jumps):
         if jump.data is None:
             continue
-        if len(jump.data) == 400:
+        if len(jump.data) == constants.frames_before_jump + constants.frames_after_jump:
             # since videoTimeStamp is for user input, I can change it's value to whatever I want
             jumps.append(
                 {

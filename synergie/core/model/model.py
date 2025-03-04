@@ -3,13 +3,15 @@ from keras import layers
 import keras_tuner
 import tf_keras
 
+from ..utils import constants
+
 
 def lstm():
     """
     Build and compile an LSTM-based neural network model.
 
     This model takes two inputs:
-    1. temporal_input: A time-series input of shape (180, 10), e.g. 180 time steps with 10 features each.
+    1. temporal_input: A time-series input of shape (constants.frames_after_jump, 10), e.g. constants.frames_after_jump time steps with 10 features each.
     2. scalar_input: A scalar input of shape (2,), e.g. two additional features such as mass and height.
 
     The model processes the temporal_input through LSTMs and dense layers,
@@ -20,7 +22,7 @@ def lstm():
         keras.Model: A compiled Keras model ready for training.
     """
     # Temporal input branch
-    temporal_input = keras.Input(shape=(180, 10), name="temporal_input")
+    temporal_input = keras.Input(shape=(constants.frames_after_jump, 10), name="temporal_input")
     x = layers.BatchNormalization()(temporal_input)
     x = keras.layers.LSTM(128, return_sequences=True)(x)
     x = keras.layers.LSTM(64)(x)
@@ -84,7 +86,7 @@ def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
 
 
 def transformer(
-    input_shape=(240, 10),
+    input_shape=((2 * constants.frames_before_jump), 10),
     head_size=256,
     num_heads=4,
     ff_dim=4,
@@ -158,7 +160,7 @@ def transformer_training(hyper_parameters: keras_tuner.HyperParameters):
     Returns:
         keras.Model: A compiled Keras model with hyperparameter-defined architecture.
     """
-    input_shape = (240, 10)
+    input_shape = ((2 * constants.frames_before_jump), 10)
     head_size = hyper_parameters.Int("head_size", min_value=32, max_value=512, step=32)
     num_heads = hyper_parameters.Int("num_heads", min_value=2, max_value=16, step=2)
     ff_dim = hyper_parameters.Int("ff_dim", min_value=128, max_value=2048, step=128)

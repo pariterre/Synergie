@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import math
 
-from .constants import JumpType, JumpSuccess
+from .constants import JumpType, JumpSuccess, frames_before_jump, frames_after_jump
 
 
 class Jump:
@@ -25,8 +25,8 @@ class Jump:
         length (float): The duration of the jump in seconds.
         rotation (float): The absolute value of rotation in degrees around the vertical axis during the jump.
         df (pd.DataFrame): The resized dataframe containing sensor data for the jump.
-        df_success (pd.DataFrame): Subset of `df` starting from frame index 120, potentially used for success analysis.
-        df_type (pd.DataFrame): Subset of `df` up to frame index 240, potentially used for type analysis.
+        df_success (pd.DataFrame): Subset of `df` starting from frame index `frames_before_jump`, potentially used for success analysis.
+        df_type (pd.DataFrame): Subset of `df` up to frame index `frames_before_jump` before and after onset of the jump, potentially used for type analysis.
         max_rotation_speed (float): The maximum rotation speed recorded during the jump.
     """
 
@@ -76,8 +76,8 @@ class Jump:
         self._data["Combination"] = [int(self._combinate)] * len(self._data)
 
         # Split the dataframe into parts potentially used for different analyses
-        self._data_success = self._data[120:]  # Frames after index 120
-        self._data_type = self._data[:240]  # Frames up to index 240
+        self._data_type = self._data[: (2 * frames_before_jump)]  # Frames before the jump and after onset
+        self._data_success = self._data[(frames_before_jump):]  # Frames that start at the jump
 
         # Clean the original dataframe by replacing infinities and dropping NaNs in 'Gyr_X_unfiltered'
         data.replace([np.inf, -np.inf], np.nan, inplace=True)
@@ -177,8 +177,8 @@ class Jump:
         """
         Normalize the jump data to a specific time frame by selecting frames around the jump.
 
-        The method ensures that there are at least 120 frames (2 seconds) before the takeoff
-        and 180 frames (3 seconds) after the landing to provide sufficient context for analysis.
+        The method ensures that there are at least `frames_before_jump` frames (60 => 1 second) before the takeoff
+        and `frames_after_jump` frames (60 => 1 second) after the landing to provide sufficient context for analysis.
 
         Args:
             df (pd.DataFrame, optional): The original dataframe containing session data.
@@ -186,7 +186,7 @@ class Jump:
         Returns:
             pd.DataFrame: A resized dataframe focused on the jump period with additional frames.
         """
-        # Select 120 frames before the jump start and 180 frames after the jump end
-        resampled_df = df[self._start - 120 : self._start + 180].copy(deep=True)
+        # Select frames_before_jump frames before the jump start and frames_after_jump frames after the jump started
+        resampled_df = df[self._start - frames_before_jump : self._start + frames_after_jump].copy(deep=True)
 
         return resampled_df

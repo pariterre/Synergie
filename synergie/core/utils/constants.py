@@ -34,6 +34,9 @@ sessions = {
     "29071": {"path": "2907/0911", "sample_time_fine_synchro": 229029957 + 20000000},
 }
 
+frames_before_jump = 120
+frames_after_jump = 180
+
 
 class JumpType(Enum):
     """

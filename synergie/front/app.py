@@ -7,10 +7,12 @@ from tkinter import messagebox
 import ttkbootstrap as ttkb
 
 from .connexion_page import ConnexionPage
+from .loading_page import LoadingPage
 from .img import logo_s2mjump_rgb_png_path
 from .main_page import MainPage
 from .starting_page import StartingPage
 from .stoping_page import StopingPage
+from ..core.data_treatment.data_generation.exporter import preload_resources
 from ..core.database.database_manager import DatabaseManager
 from ..core.utils.dot_manager import DotManager, DotConnexionStatus
 from ..core.utils.errors import (
@@ -44,6 +46,7 @@ class App:
         # Load the icon for the application window.
         ico = Image.open(logo_s2mjump_rgb_png_path)
         self._root_window.wm_iconphoto(False, ImageTk.PhotoImage(ico))
+        loading_page = LoadingPage(self._root_window)
 
         # Initialize the database manager and the dot manager.
         while True:
@@ -74,10 +77,13 @@ class App:
                 )
                 exit()
 
+        preload_resources()
+
         self._dots_white_list = dots_white_list if dots_white_list else {}
         self._dot_manager = DotManager(self._database_manager)
 
         # Launch the ConnectionPage to prompt user login.
+        loading_page.destroy()
         self._connexion_page = ConnexionPage(self._root_window, self._database_manager)
 
         # Check periodically if the user has logged in.
