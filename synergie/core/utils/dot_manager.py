@@ -1,5 +1,6 @@
 from enum import Enum, auto
 import logging
+import re
 import os
 import threading
 import time
@@ -156,7 +157,10 @@ class DotManager:
         events.set()
         unconnected_devices = []
         for port_info_bluetooth in port_info_bluetooth:
-            device = self._database_manager.get_dot_from_bluetooth(port_info_bluetooth.bluetoothAddress())
+            mac_address = port_info_bluetooth.bluetoothAddress()
+            if not re.match(r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", mac_address):
+                continue
+            device = self._database_manager.get_dot_from_bluetooth(mac_address)
             device_id = (
                 initialize_bluetooth_dot_device(movelladot_sdk.XsDotConnectionManager(), port_info_bluetooth)
                 if device is None
@@ -164,13 +168,16 @@ class DotManager:
             )
 
             if str(device_id) in port_info_usb:
-                self._devices.append(
-                    DotDevice(
-                        port_info_usb=port_info_usb[str(device_id)],
-                        port_info_bluetooth=port_info_bluetooth,
-                        database_manager=self._database_manager,
+                try:
+                    self._devices.append(
+                        DotDevice(
+                            port_info_usb=port_info_usb[str(device_id)],
+                            port_info_bluetooth=port_info_bluetooth,
+                            database_manager=self._database_manager,
+                        )
                     )
-                )
+                except BluetoothCommunicationError:
+                    pass
             else:
                 unconnected_devices.append(device.get("tag_name"))
 
