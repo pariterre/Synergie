@@ -218,7 +218,7 @@ class XdpcHandler(movelladot_sdk.XsDotCallback):
             result: The XsResultValue related to this error
             errorString: The error string with information on the problem that occurred
         """
-        _logger.error(f"Error: {movelladot_sdk.XsResultValue_toString(result)}: {errorString}")
+        _logger.error(f"Error: {result}: {errorString}")
         self._error_received = True
 
     def onDeviceUpdateDone(self, portInfo, result):

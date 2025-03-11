@@ -11,6 +11,17 @@ pip install requirements.txt
 
 Vous aurez aussi besoin du movelladot_pc_sdk : (https://www.movella.com/support/software-documentation)
 
+## Installation
+
+### Linux
+Une fois movelladot_pc_sdk installé, il est probable que les libraires `libcholmod.so.3` et `libumfpack.so.5` ne soient pas trouvées par le système, car celles-ci sont trop vieilles pour être installables. Cependant, il semble que les versions actuelles soient rétrocompatibles (pour le moment). Ainsi, pour corriger le problème, il suffit de créer des liens symboliques vers les fichiers correspondants dans le dossier `/usr/lib/` :
+
+```sh
+sudo ln -s <PATH_TO_LIB>/libcholmod.so.x <PATH_TO_LIB>/libcholmod.so.3
+sudo ln -s <PATH_TO_LIB>/libumfpack.so.x <PATH_TO_LIB>/libumfpack.so.5
+```
+en remplaçant `<PATH_TO_LIB>` par le chemin vers le dossier contenant les fichiers `libcholmod.so.x` et `libumfpack.so.x`, et qui peut être trouvé en utilisant la commande `find / -name libcholmod.so.x` ou `find / -name libumfpack.so.x`; et en remplaçant `x` par le numéro de version de la librairie installée.
+
 ## Application
 
 Une application avec une interface graphique disponible

@@ -8,9 +8,6 @@ from typing import Callable
 import asyncio
 import numpy as np
 
-if os.name == "nt":
-    from winsdk.windows.devices import radios
-
 from .dot_device import DotDevice, initialize_bluetooth_dot_device
 from .errors import BluetoothCommunicationError, MissingSensorsError
 from .movella_loader import movelladot_sdk
@@ -33,23 +30,39 @@ class DotConnexionStatus(Enum):
     MONITORING_STARTED = auto()
 
 
-async def _bluetooth_power(turn_on: bool):
+def _bluetooth_power(turn_on: bool):
     """
     Asynchronously turn Bluetooth radios on or off.
 
     Args:
         turn_on (bool): True to turn on Bluetooth, False to turn it off.
     """
+
     try:
-        all_radios = await radios.Radio.get_radios_async()
-        for this_radio in all_radios:
-            if this_radio.kind == radios.RadioKind.BLUETOOTH:
-                if turn_on:
-                    await this_radio.set_state_async(radios.RadioState.ON)
-                    _logger.info("Bluetooth turned ON.")
-                else:
-                    await this_radio.set_state_async(radios.RadioState.OFF)
-                    _logger.info("Bluetooth turned OFF.")
+        if os.name == "nt":
+            from winsdk.windows.devices import radios
+
+            async def toggle_bluetooth_on_windows(turn_on: bool):
+                all_radios = await radios.Radio.get_radios_async()
+                for this_radio in all_radios:
+                    if this_radio.kind == radios.RadioKind.BLUETOOTH:
+                        if turn_on:
+                            await this_radio.set_state_async(radios.RadioState.ON)
+                            _logger.info("Bluetooth turned ON.")
+                        else:
+                            await this_radio.set_state_async(radios.RadioState.OFF)
+                            _logger.info("Bluetooth turned OFF.")
+
+            asyncio.run(toggle_bluetooth_on_windows(turn_on))
+        elif os.name == "posix":
+            import subprocess
+
+            cmd = ["power", "on" if turn_on else "off"]
+            subprocess.run(["bluetoothctl"] + cmd, check=True)
+            _logger.info(f"Bluetooth turned {'ON' if turn_on else 'OFF'}.")
+        else:
+            _logger.error("Unsupported OS.")
+            raise BluetoothCommunicationError()
 
     except Exception as e:
         _logger.error(f"Exception in bluetooth_power: {e}")
@@ -90,12 +103,7 @@ class DotManager:
         self._previous_plugged_devices = []
 
         # Disable Bluetooth
-        if os.name == "nt":
-            asyncio.run(_bluetooth_power(False))
-        elif os.name == "posix":
-            os.system("rfkill block bluetooth")
-        else:
-            raise NotImplementedError("Bluetooth power control not implemented for this OS.")
+        _bluetooth_power(False)
 
         # Initialize USB connection handler
         xdpc_handler = XdpcHandler(whitelist=dots_white_list)
@@ -120,12 +128,7 @@ class DotManager:
         _logger.info(f"Connected USB devices: {list(port_info_usb.keys())}")
 
         # Re-enable Bluetooth
-        if os.name == "nt":
-            asyncio.run(_bluetooth_power(True))
-        elif os.name == "posix":
-            os.system("rfkill unblock bluetooth")
-        else:
-            raise NotImplementedError("Bluetooth power control not implemented for this OS.")
+        _bluetooth_power(True)
 
         # Initialize Bluetooth connection handler
         self._status = DotConnexionStatus.CONNECTING_BLUETOOTH
@@ -141,9 +144,10 @@ class DotManager:
             xdpc_handler.scan_for_dots(white_list=mac_addresses)
             port_info_bluetooth = xdpc_handler.detected_dots()
             xdpc_handler.cleanup()
-            _logger.info(f"Detected Bluetooth devices: {[info.bluetoothAddress() for info in port_info_bluetooth]}")
+            bluetooth_mac_addresses = [info.bluetoothAddress() for info in port_info_bluetooth]
+            _logger.info(f"Detected Bluetooth devices: {bluetooth_mac_addresses}")
 
-            if all(str(info.bluetoothAddress()) in mac_addresses for info in port_info_bluetooth):
+            if all(str(address) in bluetooth_mac_addresses for address in mac_addresses):
                 break
             time.sleep(1)
 
