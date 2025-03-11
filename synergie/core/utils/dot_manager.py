@@ -10,7 +10,7 @@ import asyncio
 import numpy as np
 
 from .dot_device import DotDevice, initialize_bluetooth_dot_device
-from .errors import BluetoothCommunicationError, MissingSensorsError
+from .errors import BluetoothCommunicationError, MissingSensorsError, UsbCommunicationError
 from .movella_loader import movelladot_sdk
 from .xdpchandler import XdpcHandler
 from ..database.database_manager import DatabaseManager
@@ -267,7 +267,10 @@ class DotManager:
         has_connected = []
         for device in plugged_devices:
             if device not in self._previous_plugged_devices:
-                device.open_usb(should_stop_recording=True)
+                try:
+                    device.open_usb(should_stop_recording=True)
+                except UsbCommunicationError:
+                    continue
                 has_connected.append(device)
 
                 # If device is currently recording or has pending records, stop it.
